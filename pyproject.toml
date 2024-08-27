@@ -1,0 +1,46 @@
+[tool.poetry]
+name = "tinychat"
+version = "0.0.1"
+description = "Conversational AI framework"
+authors = ["Dante Noguez <dante@odyseus.ai>"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+pandas = "^2.2.2"
+openai = "^1.42.0"
+fastapi = "^0.112.1"
+uvicorn = "^0.30.6"
+loguru = "^0.7.2"
+requests = "^2.32.3"
+beautifulsoup4 = "^4.12.3"
+twilio = "^9.2.3"
+python-dotenv = "^1.0.1"
+gunicorn = "^23.0.0"
+python-multipart = "^0.0.9"
+pytest = "^8.3.2"
+pytest-asyncio = "^0.24.0"
+redis = "^5.0.8"
+
+[tool.poetry.group.lint.dependencies]
+black = "^24.8.0"
+isort = "^5.13.2"
+mypy = "^1.11.1"
+pydub-stubs = "^0.25.1.1"
+types-redis = "^4.6.0.20240819"
+types-regex = "^2024.7.24.20240726"
+types-requests = "^2.32.0.20240712"
+pandas-stubs = "^2.2.2.240807"
+twilio-stubs = "^0.2.0"
+
+
+[tool.poetry.group.vector_db.dependencies]
+chromadb = {version = "^0.5.5", optional = true}
+
+[tool.mypy]
+ignore_missing_imports = true
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

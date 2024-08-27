@@ -1,0 +1,19 @@
+version: '3.11'
+
+services:
+  app:
+    build:
+      context: ../../..
+      dockerfile: tinychat/examples/kavak_ai/Dockerfile
+    ports:
+      - "8081:8081"
+    environment:
+      - REDISHOST=redis
+      - REDISPORT=6379
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:6
+    ports:
+      - "6379:6379"
