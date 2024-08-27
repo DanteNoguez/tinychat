@@ -19,7 +19,9 @@ TWILIO_ACCOUNT_SID=
 TWILIO_AUTH_TOKEN=
 ```
 
-Lastly, run the app:
+🚧 Warning: chromadb has inherent dependency issues in some environments, so it's temporarily disabled for the container. It can be enabled when running the app locally with uvicorn (uncomment line 39 in the `main.py` file).
+
+Lastly, run the app with Docker:
 ```
 make kavak-run
 ```
@@ -57,3 +59,4 @@ At a more granular level, the `Conversation` holds the memory, prompt, vectorDB,
 - Integrate with internal datasources
 - More unit tests, more tools
 - Prompt completeness
+- Human delegation

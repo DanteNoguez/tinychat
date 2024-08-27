@@ -7,24 +7,31 @@ from tinychat.examples.kavak_ai.utils.rag import df
 
 
 class FinanciamientoTool(Tool):
-    async def run(self, enganche: float, presupuesto: float, tasa: float, plazo: int):
+    async def run(self, enganche: str, presupuesto: str, tasa: str, plazo: str):
+        # Convert inputs to appropriate types
+        try:
+            enganche = float(enganche)
+            presupuesto = float(presupuesto)
+            tasa = float(tasa)
+            plazo = int(plazo)
+        except ValueError:
+            return "Invalid input types. Please provide numeric values."
+
         # Input validations
         if enganche <= 0 or presupuesto <= 0:
-            raise ValueError(
-                "Enganche o presupuesto inválidos. Verifica los valores ingresados."
-            )
+            return "Enganche o presupuesto inválidos. Verifica los valores ingresados."
 
         if tasa != 10:
-            raise ValueError("La tasa de interés debe ser del 10 %.")
+            return "La tasa de interés debe ser del 10 %."
 
         if plazo < 3 or plazo > 6:
-            raise ValueError("El plazo debe ser mayor a 3 años y menor a 6.")
+            return "El plazo debe ser mayor a 3 años y menor a 6."
 
         if enganche < 0.2 * presupuesto:
-            raise ValueError("El enganche debe ser al menos el 20 % del presupuesto.")
+            return "El enganche debe ser al menos el 20 % del presupuesto."
 
         if enganche >= presupuesto:
-            raise ValueError("El enganche no puede ser mayor o igual al presupuesto.")
+            return "El enganche no puede ser mayor o igual al presupuesto."
 
         # Calculations
         monto_financiar = presupuesto - enganche
@@ -64,7 +71,7 @@ FINANCIAMIENTO_TOOL = FinanciamientoTool(
         ),
         ToolParameter(
             name="presupuesto",
-            description="Presupuesto del cliente.",
+            description="Presupuesto total del cliente.",
             data_type="string",
         ),
         ToolParameter(

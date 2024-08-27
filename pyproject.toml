@@ -22,6 +22,7 @@ python-multipart = "^0.0.9"
 pytest = "^8.3.2"
 pytest-asyncio = "^0.24.0"
 redis = "^5.0.8"
+chromadb = {version = "^0.5.5", optional = true}
 
 [tool.poetry.group.lint.dependencies]
 black = "^24.8.0"
@@ -34,9 +35,8 @@ types-requests = "^2.32.0.20240712"
 pandas-stubs = "^2.2.2.240807"
 twilio-stubs = "^0.2.0"
 
-
-[tool.poetry.group.vector_db.dependencies]
-chromadb = {version = "^0.5.5", optional = true}
+[tool.poetry.extras]
+vector_db = ["chromadb"]
 
 [tool.mypy]
 ignore_missing_imports = true

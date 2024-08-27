@@ -13,7 +13,7 @@ load_dotenv()
 
 from tinychat.examples.kavak_ai.agents import KAVAK_AGENTS_REGISTRY, AgentConfigType
 
-# from tinychat.examples.kavak_ai.utils.rag import KAVAK_VECTOR_REGISTRY
+from tinychat.examples.kavak_ai.utils.rag import KAVAK_VECTOR_REGISTRY
 from tinychat.examples.kavak_ai.chat import KavakConversationsManager
 from tinychat.examples.kavak_ai.models import ChatRequest, ChatResponse, MemoryRequest
 
@@ -36,7 +36,7 @@ app = FastAPI(docs_url="/docs")
 
 CONVERSATIONS_MANAGER = KavakConversationsManager(
     agent_registry=KAVAK_AGENTS_REGISTRY,
-    # vectordb_registry=KAVAK_VECTOR_REGISTRY,
+    vectordb_registry=KAVAK_VECTOR_REGISTRY,  # Uncomment to use RAG locally with uvicorn - Run `make run` from the project root directory
 )
 
 

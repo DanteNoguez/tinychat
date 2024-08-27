@@ -61,6 +61,7 @@ class OpenAIAgent:
         self, messages: list[dict]
     ) -> Optional[ChatCompletionMessage | str]:
         try:
+            logger.debug(f"Messages so far: {messages}")
             completion = await self.client.chat.completions.create(
                 model=self.model_name,
                 temperature=self.temperature,
@@ -112,8 +113,12 @@ class OpenAIAgent:
         )  # TODO: handle this with a retry
 
     async def handle_generate_response(self, messages: list[dict]) -> str | list[dict]:
-        response = await self.generate_completion_async(messages)
-        logger.debug(f"Generated response: {response}")
-        if isinstance(response, ChatCompletionMessage):
-            return await self.handle_function_call(messages, response)
-        return response
+        try:
+            response = await self.generate_completion_async(messages)
+            logger.debug(f"Generated response: {response}")
+            if isinstance(response, ChatCompletionMessage):
+                return await self.handle_function_call(messages, response)
+            return response
+        except Exception as e:
+            logger.exception(f"Error in handle generate response: {e}", exc_info=True)
+            raise e
