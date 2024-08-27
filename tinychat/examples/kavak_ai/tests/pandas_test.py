@@ -2,8 +2,7 @@ import pandas as pd
 import pytest
 
 from tinychat.agents import PandasAgent
-from tinychat.agents.models import PandasAgentConfig
-from tinychat.agents.models import Tool, ToolParameter
+from tinychat.agents.models import PandasAgentConfig, Tool, ToolParameter
 
 
 @pytest.fixture(scope="module")
@@ -21,7 +20,9 @@ def buscar_auto_tool():
     )
 
     KAVAK_PANDAS_AGENT = PandasAgent(
-        config=PandasAgentConfig(prompt="You're an assistant at a car dealership.", df_dict=df.to_dict()),
+        config=PandasAgentConfig(
+            prompt="You're an assistant at a car dealership.", df_dict=df.to_dict()
+        ),
     )
 
     class BuscarAutoTool(Tool):
