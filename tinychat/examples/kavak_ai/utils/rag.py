@@ -11,15 +11,14 @@ csv_file_path = os.path.join(current_dir, "cars.csv")
 with open(csv_file_path, "r", encoding="utf-8") as f:
     df = pd.read_csv(f)
 
-# KAVAK_CONFIG = VectorDBConfig(
-#     path=current_dir + "/testing_db",
-#     collection_name="testing",
-# )
+KAVAK_CONFIG = VectorDBConfig(
+    path=current_dir + "/testing_db",
+    collection_name="testing",
+)
 
-# KAVAK_VECTOR_REGISTRY = VectorDBRegistry(
-#     configs={"default": KAVAK_CONFIG},
-#     default_collection_name="default"
-# )
+KAVAK_VECTOR_REGISTRY = VectorDBRegistry(
+    configs={"default": KAVAK_CONFIG}, default_collection_name="default"
+)
 
 if __name__ == "__main__":
     import json

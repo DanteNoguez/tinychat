@@ -25,6 +25,10 @@ You're ready to go, just run the quickstart and start chatting!
 make quickstart
 ```
 
+## Bugs and to-dos
+- Reducing the size of the memory can induce an OpenAI error: `messages with role 'tool' must be a response to a preceeding message with 'tool_calls'`
+- Chroma has inherent issues with dependencies, so it's usable in some environments (like our container)
+
 ## Roadmap
 - ConversationsManager scalability
 - abstractions improvements and redesign

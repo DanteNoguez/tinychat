@@ -14,7 +14,9 @@ from tinychat.examples.kavak_ai.tools import (
 # isort: on
 
 KAVAK_DEFAULT_AGENT_CONFIG = OpenAIAgentConfig(
-    prompt=DEFAULT_KAVAK_AGENT_PROMPT, tools=[BUSCAR_AUTO_TOOL, FINANCIAMIENTO_TOOL]
+    prompt=DEFAULT_KAVAK_AGENT_PROMPT,
+    tools=[BUSCAR_AUTO_TOOL, FINANCIAMIENTO_TOOL],
+    max_tokens=500,
 )
 
 KAVAK_DEFAULT_AGENT = OpenAIAgent(config=KAVAK_DEFAULT_AGENT_CONFIG)

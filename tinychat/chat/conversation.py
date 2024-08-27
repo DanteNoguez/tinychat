@@ -11,7 +11,7 @@ from tinychat.rag.models import VectorDBConfig
 class Conversation(BaseModel):
     conversation_id: int
     agent_config: AgentConfig
-    max_memory_size: int = 20
+    max_memory_size: int = 40
     vectordb_config: Optional[VectorDBConfig] = None
     memory: List[Dict[str, str]] = None
 
