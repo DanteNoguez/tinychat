@@ -25,12 +25,9 @@ You're ready to go, just run the quickstart and start chatting!
 make quickstart
 ```
 
-## to-dos
-- documentation
-- architecture diagrams
-- in memory vector db
-
 ## Roadmap
+- ConversationsManager scalability
+- abstractions improvements and redesign
 - long-term memory, entities memory
 - Proxy server (queue, token limits and keys management, load balancing)
 - Telemetry, performance monitoring, error tracking

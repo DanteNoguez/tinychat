@@ -10,7 +10,7 @@ quickstart:
 	@poetry run python tinychat/examples/quickstarts/single_chat.py
 
 test:
-	@poetry run pytest tests
+	@poetry run pytest tinychat/examples/kavak_ai/tests
 
 lint:
 	echo "\nLinting with isort...\n" && \

@@ -49,13 +49,11 @@ At a more granular level, the `Conversation` holds the memory, prompt, vectorDB,
 ## Unit tests
 - Pandas agent accuracy
 
-# To-dos
-- Authentication
-- Proxy server (queue, token limits and keys management, load balancing)
-- Telemetry, performance monitoring, error tracking
-- long-term memory, entities memory
-- Prompt completeness
-- Integrate with business database
-- More unit tests
-
 # Roadmap
+- Authentication
+- Proxy server (queue, concurrency, token limits and keys management, load balancing)
+- Telemetry, performance monitoring, error tracking, costs tracking
+- long-term memory, entities memory
+- Integrate with internal datasources
+- More unit tests, more tools
+- Prompt completeness
