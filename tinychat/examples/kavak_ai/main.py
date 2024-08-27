@@ -36,7 +36,13 @@ app = FastAPI(docs_url="/docs")
 
 CONVERSATIONS_MANAGER = KavakConversationsManager(
     agent_registry=KAVAK_AGENTS_REGISTRY,
-    # vectordb_registry=KAVAK_VECTOR_REGISTRY,  # Uncomment to use RAG locally with uvicorn - Run `make run` from the project root directory
+    # To use RAG locally,
+    # uncomment line 45 in this file.
+    # Go to the root directory and run:
+    # poetry install --extras vector_db
+    # poetry run python tinychat/examples/kavak_ai/rag.py
+    # make run
+    # vectordb_registry=KAVAK_VECTOR_REGISTRY,
 )
 
 

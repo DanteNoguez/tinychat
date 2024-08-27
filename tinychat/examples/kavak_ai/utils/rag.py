@@ -12,8 +12,8 @@ with open(csv_file_path, "r", encoding="utf-8") as f:
     df = pd.read_csv(f)
 
 KAVAK_CONFIG = VectorDBConfig(
-    path=current_dir + "/testing_db",
-    collection_name="testing",
+    path=current_dir + "/kavak_db",
+    collection_name="kavak",
 )
 
 KAVAK_VECTOR_REGISTRY = VectorDBRegistry(
@@ -34,12 +34,11 @@ if __name__ == "__main__":
     with open(json_file_path, "r", encoding="utf-8") as f:
         chunks = json.load(f)
 
-    # kavak_collection = VectorDBRegistry.create_collection(
-    #     source_documents=chunks, name="testing", path=current_dir + "/testing_db"
-    # )
+    kavak_collection = VectorDBRegistry.create_chroma_collection(
+        source_documents=chunks, name="kavak", path=current_dir + "/kavak_db"
+    )
 
     kavak_collection = ChromaCollection(
-        path=current_dir + "/testing_db",
-        collection_name="testing",
+        config=KAVAK_CONFIG,
     )
     print(kavak_collection.similarity_search("qué es kavak?", 2))
