@@ -33,9 +33,6 @@ class AgentConfig(BaseModel):
     max_retries: Optional[int] = None
     tools: Optional[list[Tool]] = None
 
-    # class Config:
-    #     arbitrary_types_allowed=True
-
 
 class OpenAIAgentConfig(AgentConfig):
     model_name: str = "gpt-4o"
