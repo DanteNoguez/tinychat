@@ -3,7 +3,7 @@ import asyncio
 from tinychat.agents import OpenAIAgent
 from tinychat.agents.models import OpenAIAgentConfig
 from tinychat.agents.registry import AgentConfigRegistry
-from tinychat.conversations_manager import InMemoryConversationsManager
+from tinychat.manager.in_memory import InMemoryConversationsManager
 
 DEFAULT_AGENT_CONFIG = OpenAIAgentConfig(
     prompt="You're a knowledgeable AI that teaches in the style of Richard Feynman.",
@@ -26,7 +26,7 @@ async def main():
         try:
             user_input = input("You: ")
             response = await CONVERSATIONS_MANAGER.handle_incoming_message(
-                identifier=1, agent_type="default", message=user_input
+                identifier=1, request_type="default", message=user_input
             )
             print(f"AI: {response}")
         except KeyboardInterrupt:

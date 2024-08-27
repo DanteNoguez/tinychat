@@ -1,9 +1,9 @@
 import asyncio
 
-from tinychat.agents import OpenAIAgent
 from tinychat.agents.models import OpenAIAgentConfig
 from tinychat.agents.registry import AgentConfigRegistry
-from tinychat.conversations_manager import InMemoryConversationsManager
+from tinychat.manager.in_memory import InMemoryConversationsManager
+from tinychat.manager.redis_manager import RedisConversationsManager
 
 DEFAULT_AGENT_CONFIG = OpenAIAgentConfig(
     prompt="You're a knowledgeable AI that teaches in the style of Richard Feynman.",
@@ -15,7 +15,7 @@ agent_registry = AgentConfigRegistry(
     configs={"default": DEFAULT_AGENT_CONFIG}, default_agent_type="default"
 )
 
-CONVERSATIONS_MANAGER = InMemoryConversationsManager(
+CONVERSATIONS_MANAGER = RedisConversationsManager(
     agent_registry=agent_registry,
 )
 

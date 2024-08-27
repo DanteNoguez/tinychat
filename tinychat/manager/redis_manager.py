@@ -14,10 +14,17 @@ class RedisConversationsManager(RedisDB, InMemoryConversationsManager):
         vectordb_registry: Optional[VectorDBRegistry] = None,
         max_size: int = 100,
     ):
-        self.agent_registry = agent_registry
-        self.vectordb_registry = vectordb_registry
-        self.max_size = max_size
-        self.access_order: list[str] = []
+        InMemoryConversationsManager.__init__(
+            self,
+            agent_registry=agent_registry,
+            vectordb_registry=vectordb_registry,
+            max_size=max_size,
+        )
+        RedisDB.__init__(self)
+        self.conversations: dict[int, Conversation] = {}
+        self.access_order: dict[int, str] = {}  # key: conversation_id, value: next_id
+        self.head_id: Optional[int] = None
+        self.tail_id: Optional[int] = None
 
     async def get_conversation(self, identifier: str) -> Conversation:
         conversation_id = self.get_conversation_id(identifier)
@@ -28,7 +35,7 @@ class RedisConversationsManager(RedisDB, InMemoryConversationsManager):
         conversation_data = await self.get_redis_conversation(conversation_id)
         if conversation_data:
             self.conversations[conversation_id] = conversation_data
-            self._add_to_front(conversation_id, conversation_data)
+            self._add_to_front(conversation_id)
             return conversation_data
 
         raise ValueError(f"Conversation with ID {identifier} not found.")
@@ -76,5 +83,7 @@ class RedisConversationsManager(RedisDB, InMemoryConversationsManager):
             conversation_id, request_type
         )
         response = await conversation.generate_response(message)
-        await self.add_redis_conversation(conversation_id, conversation)
+        await self.add_redis_conversation(
+            conversation_id, conversation
+        )  # TODO: make this an update
         return response
