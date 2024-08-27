@@ -19,7 +19,7 @@ TWILIO_ACCOUNT_SID=
 TWILIO_AUTH_TOKEN=
 ```
 
-🚧 Warning: chromadb has inherent dependency issues in some environments, so it's temporarily disabled for the container. It can be enabled when running the app locally with uvicorn (uncomment line 39 in the `main.py` file).
+🚧 Warning: chromadb has inherent dependency issues in some environments, so it's temporarily disabled for the container. It can be enabled when running the app locally with uvicorn (check comments in line 39 of the `main.py` file).
 
 Lastly, run the app with Docker:
 ```
