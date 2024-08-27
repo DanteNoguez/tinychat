@@ -2,7 +2,7 @@ import pandas as pd
 import pytest
 
 from tinychat.agents import PandasAgent
-from tinychat.agents.models import Tool, ToolParameter
+from tinychat.agents.models import PandasAgentConfig, Tool, ToolParameter
 
 
 @pytest.fixture(scope="module")
@@ -19,16 +19,18 @@ def buscar_auto_tool():
         }
     )
 
-    kavak_pandas_agent = PandasAgent(
-        prompt="You're an assistant at a car dealership.", df=df
+    KAVAK_PANDAS_AGENT = PandasAgent(
+        config=PandasAgentConfig(
+            prompt="You're an assistant at a car dealership.", df_dict=df.to_dict()
+        ),
     )
 
     class BuscarAutoTool(Tool):
         async def run(self, query: str):
             try:
-                code = await kavak_pandas_agent.generate_code_async(query)
+                code = await KAVAK_PANDAS_AGENT.generate_code_async(query)
                 print(code)
-                return kavak_pandas_agent.execute_code(code)
+                return KAVAK_PANDAS_AGENT.execute_code(code)
             except Exception as e:
                 print(f"Exception using pandas tool: {e}")
                 return (
