@@ -36,7 +36,7 @@ app = FastAPI(docs_url="/docs")
 
 CONVERSATIONS_MANAGER = KavakConversationsManager(
     agent_registry=KAVAK_AGENTS_REGISTRY,
-    vectordb_registry=KAVAK_VECTOR_REGISTRY,  # Uncomment to use RAG locally with uvicorn - Run `make run` from the project root directory
+    # vectordb_registry=KAVAK_VECTOR_REGISTRY,  # Uncomment to use RAG locally with uvicorn - Run `make run` from the project root directory
 )
 
 
