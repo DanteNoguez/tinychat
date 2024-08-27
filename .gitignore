@@ -3,3 +3,4 @@ venv*/
 .mypy_cache
 __pycache__/
 testing_db/
+misc/
