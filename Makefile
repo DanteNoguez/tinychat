@@ -6,6 +6,9 @@ all: help
 run:
 	@poetry run uvicorn tinychat.examples.kavak_ai.main:app --reload --port 8081
 
+quickstart:
+	@poetry run python tinychat/examples/quickstarts/single_chat.py
+
 test:
 	@poetry run pytest tests
 
