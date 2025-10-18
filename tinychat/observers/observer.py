@@ -22,6 +22,7 @@ class MessageProcessed:
     result: Optional[Message]
     timestamp: int
 
+
 @dataclass
 class MessageRouted:
     source: "MessageProcessor"

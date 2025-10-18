@@ -67,4 +67,3 @@ class ErrorMessage(Message):
 @dataclass
 class ControlMessage(Message):
     pass
-

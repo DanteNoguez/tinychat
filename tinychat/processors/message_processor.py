@@ -19,7 +19,6 @@ from tinychat.asynchronous.manager import (
     TaskManager,
     TaskManagerParams,
 )
-from tinychat.processors.exceptions import MaxHopsExceededError
 
 
 @dataclass
@@ -161,7 +160,9 @@ class MessageProcessor:
         if not self._observers:
             return
 
-        data = MessageReceived(processor=self, message=message, timestamp=time.monotonic_ns())
+        data = MessageReceived(
+            processor=self, message=message, timestamp=time.monotonic_ns()
+        )
 
         for observer in self._observers:
             try:

@@ -1,6 +1,5 @@
 """Tests for message classes."""
 
-
 from tinychat.messages.messages import (
     Message,
     UserMessage,
