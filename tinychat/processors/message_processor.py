@@ -1,6 +1,6 @@
 import asyncio
 import time
-import uuid
+from utils.utils import random_id
 from abc import abstractmethod
 from dataclasses import dataclass
 from typing import Coroutine, List, Optional
@@ -42,15 +42,15 @@ class MessageProcessor:
     """
 
     def __init__(self, *, name: Optional[str] = None):
-        self._id = uuid.uuid4()
-        self._name = name or f"{self.__class__.__name__}_{self._id.hex[:8]}"
+        self._id = random_id()
+        self._name = name or f"{self.__class__.__name__}_{self._id}"
         self._task_manager: Optional[BaseTaskManager] = None
         self._observers: List[BaseObserver] = []
         self._started = False
         self._owns_task_manager = False
 
     @property
-    def id(self) -> uuid.UUID:
+    def id(self) -> str:
         return self._id
 
     @property
@@ -121,12 +121,12 @@ class MessageProcessor:
         - Routing from and to other processors
         """
 
-        await self._notify_received(message)
+        self.create_task(self._notify_received(message))
 
         try:
             result = await self._process(message)
 
-            await self._notify_processed(message, result)
+            self.create_task(self._notify_processed(message, result))
             return result
 
         except Exception as e:
