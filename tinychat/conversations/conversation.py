@@ -5,16 +5,14 @@ from typing import List, Optional
 from loguru import logger
 
 from tinychat.messages.messages import Message
-from tinychat.observers.observer import BaseObserver
+from tinychat.observers.observer import BaseObserver, StateChanged, MessageRouted
 from tinychat.processors.message_processor import CompositeProcessor, ProcessorSetup
-from tinychat.events.router import EventRouter
 from tinychat.state.state import ConversationState, AgentState, StateEntry
 from tinychat.asynchronous.manager import (
     BaseTaskManager,
     TaskManager,
     TaskManagerParams,
 )
-from tinychat.observers.observer import StateChanged, ProcessorCalled
 
 
 class Conversation(CompositeProcessor):
@@ -24,7 +22,6 @@ class Conversation(CompositeProcessor):
     Conversation extends CompositeProcessor to add:
     - Conversation-specific state (phase, current processor)
     - Shared agent state for coordination
-    - Event router for event-driven routing (optional)
     - State transition callbacks and notifications
 
     Like all CompositeProcessors, sub-processors can call each other directly:
@@ -41,7 +38,6 @@ class Conversation(CompositeProcessor):
         *,
         task_manager: Optional[BaseTaskManager] = None,
         observers: Optional[List[BaseObserver]] = None,
-        enable_router: bool = False,
     ):
         super().__init__(name=conversation_id, processors=processors)
         self._conversation_id = conversation_id
@@ -53,13 +49,16 @@ class Conversation(CompositeProcessor):
         if observers:
             self._observers = observers
 
-        # Optional event router for backward compatibility
-        self._router = EventRouter(self) if enable_router else None
         self._setup_complete = False
 
     @property
     def conversation_id(self) -> str:
         return self._conversation_id
+
+    @property
+    def state(self) -> ConversationState:
+        """Conversation-specific state (phase, current processor)."""
+        return self._conversation_state
 
     @property
     def conversation_state(self) -> ConversationState:
@@ -70,11 +69,6 @@ class Conversation(CompositeProcessor):
     def agent_state(self) -> AgentState:
         """Shared state for agents to coordinate and share data."""
         return self._agent_state
-
-    @property
-    def router(self) -> Optional[EventRouter]:
-        """Event router (only available if enable_router=True)."""
-        return self._router
 
     def __str__(self) -> str:
         return f"Conversation({self._conversation_id})"
@@ -116,30 +110,16 @@ class Conversation(CompositeProcessor):
 
     async def cleanup(self):
         """Clean up conversation and all sub-processors."""
-        if self._router:
-            await self._router.cleanup()
-
         await super().cleanup()
         self._setup_complete = False
 
     async def _process(self, message: Message) -> Optional[Message]:
         """
-        Process message through the event router (if enabled).
-
-        If router is enabled, delegates to event handlers.
-        Otherwise, raises NotImplementedError (subclasses should override or use route_to).
+        Process message - subclasses should override or use route_to directly.
         """
-        if self._router:
-            logger.trace(
-                f"{self}: processing message {message.id} ({type(message).__name__}) via event router"
-            )
-            results = await self._router.emit(message)
-            return results[-1] if results else None
-        else:
-            raise NotImplementedError(
-                f"{self}: Conversation requires either enable_router=True or "
-                "overriding _process() to define routing logic"
-            )
+        raise NotImplementedError(
+            f"{self}: Conversation requires overriding _process() to define routing logic"
+        )
 
     async def route_to(
         self, processor_name: str, message: Message
@@ -161,20 +141,20 @@ class Conversation(CompositeProcessor):
         # Use parent's route_to which tracks composite state
         return await super().route_to(processor_name, message)
 
-    async def notify_processor_called(self, source, target, message: Message):
-        """Notify observers that one processor called another."""
+    async def notify_message_routed(self, source, target, message: Message):
+        """Notify observers that a message was routed between processors."""
         if not self._observers:
             return
 
-        data = ProcessorCalled(
+        data = MessageRouted(
             source=source, target=target, message=message, timestamp=time.time_ns()
         )
 
         for observer in self._observers:
             try:
-                await observer.on_processor_called(data)
+                await observer.on_message_routed(data)
             except Exception as e:
-                logger.exception(f"Observer {observer} failed on_processor_called: {e}")
+                logger.exception(f"Observer {observer} failed on_message_routed: {e}")
 
     async def _on_state_transition(self, entry: StateEntry):
         """Handle state transitions and notify observers."""

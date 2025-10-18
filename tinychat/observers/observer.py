@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 
-from tinychat.messages.messages import Message
+from tinychat.messages.messages import ErrorMessage, Message
 
 if TYPE_CHECKING:
     from tinychat.processors.message_processor import MessageProcessor
@@ -21,11 +21,9 @@ class MessageProcessed:
     message: Message
     result: Optional[Message]
     timestamp: int
-    duration_ns: int
-
 
 @dataclass
-class ProcessorCalled:
+class MessageRouted:
     source: "MessageProcessor"
     target: "MessageProcessor"
     message: Message
@@ -51,7 +49,7 @@ class BaseObserver(ABC):
         pass
 
     @abstractmethod
-    async def on_processor_called(self, data: ProcessorCalled):
+    async def on_message_routed(self, data: MessageRouted):
         pass
 
     @abstractmethod
@@ -66,8 +64,11 @@ class Observer(BaseObserver):
     async def on_message_processed(self, data: MessageProcessed):
         pass
 
-    async def on_processor_called(self, data: ProcessorCalled):
+    async def on_message_routed(self, data: MessageRouted):
         pass
 
     async def on_state_changed(self, data: StateChanged):
+        pass
+
+    async def on_error(self, data: ErrorMessage):
         pass

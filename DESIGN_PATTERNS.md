@@ -518,3 +518,14 @@ TinyChat provides a framework that treats conversational AI as an **information 
 
 This design makes complex conversational systems easier to reason about, test, and extend while maintaining mathematical rigor and practical efficiency.
 
+---
+
+The Essential Building Blocks
+Your current architecture has identified the irreducible core of conversational AI:
+Message - The quantum of information. This is atomic and correct. A message is a discrete packet that carries information through time (timestamp) and space (routing).
+MessageProcessor - The transformation operator. This is the transfer function: f: Message → Message. Stateless by design (operational metrics don't count as domain state). This is fundamental.
+CompositeProcessor - The composition operator. This enables any graph topology (complete graph subsumes all others: DAG, tree, ring, chain). This is the key architectural insight.
+These three are necessary and sufficient. Everything else should be either:
+A specialization of these (like Conversation extending CompositeProcessor)
+Infrastructure to support them (like TaskManager, Observer)
+Emergent properties (like causal chains from parent_id)
