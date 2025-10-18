@@ -1,4 +1,5 @@
 """Tests for state management classes."""
+
 import pytest
 
 from tinychat.state.state import AgentState, ConversationState, StateEntry
@@ -10,7 +11,10 @@ class TestStateEntry:
     def test_state_entry_creation(self):
         """Test that StateEntry can be created."""
         entry = StateEntry(
-            name="test_field", value="test_value", timestamp=1234567890, metadata={"key": "value"}
+            name="test_field",
+            value="test_value",
+            timestamp=1234567890,
+            metadata={"key": "value"},
         )
         assert entry.name == "test_field"
         assert entry.value == "test_value"
@@ -54,7 +58,7 @@ class TestAgentState:
         """Test that set records changes in history."""
         state = AgentState(conversation_id="conv_123", agent_id="agent_1")
         await state.set("key1", "value1")
-        
+
         history = state.history
         assert len(history) == 1
         assert history[0].name == "key1"
@@ -66,7 +70,7 @@ class TestAgentState:
         """Test set with metadata."""
         state = AgentState(conversation_id="conv_123", agent_id="agent_1")
         await state.set("key1", "value1", metadata={"source": "processor_1"})
-        
+
         entry = state.history[0]
         assert entry.metadata["source"] == "processor_1"
 
@@ -76,7 +80,7 @@ class TestAgentState:
         state = AgentState(conversation_id="conv_123", agent_id="agent_1")
         await state.set("key1", "value1")
         await state.set("key1", "value2")
-        
+
         history = state.history
         assert len(history) == 2
         assert history[1].metadata.get("previous_value") == "value1"
@@ -86,6 +90,7 @@ class TestAgentState:
         state = AgentState(conversation_id="conv_123", agent_id="agent_1")
         # Use asyncio.run for async methods in sync tests
         import asyncio
+
         asyncio.run(state.set("key1", "value1"))
         assert state.has("key1") is True
         assert state.has("key2") is False
@@ -96,7 +101,7 @@ class TestAgentState:
         state = AgentState(conversation_id="conv_123", agent_id="agent_1")
         await state.set("key1", "value1")
         await state.delete("key1")
-        
+
         assert state.has("key1") is False
         # Check deletion is recorded in history
         history = state.history
@@ -110,7 +115,7 @@ class TestAgentState:
         """Test bulk update method."""
         state = AgentState(conversation_id="conv_123", agent_id="agent_1")
         await state.update({"key1": "value1", "key2": "value2"})
-        
+
         assert state.get("key1") == "value1"
         assert state.get("key2") == "value2"
         # Each key should have a history entry
@@ -120,6 +125,7 @@ class TestAgentState:
         """Test clear method."""
         state = AgentState(conversation_id="conv_123", agent_id="agent_1")
         import asyncio
+
         asyncio.run(state.update({"key1": "value1", "key2": "value2"}))
         state.clear()
         assert state.data == {}
@@ -130,11 +136,12 @@ class TestAgentState:
         """Test data property returns a copy."""
         state = AgentState(conversation_id="conv_123", agent_id="agent_1")
         import asyncio
+
         asyncio.run(state.set("key1", "value1"))
-        
+
         data = state.data
         data["key2"] = "value2"  # Modify the returned dict
-        
+
         # Original state should be unchanged
         assert state.has("key2") is False
 
@@ -142,8 +149,9 @@ class TestAgentState:
         """Test repr method."""
         state = AgentState(conversation_id="conv_123", agent_id="agent_1")
         import asyncio
+
         asyncio.run(state.set("key1", "value1"))
-        
+
         repr_str = repr(state)
         assert "agent_1" in repr_str
         assert "key1" in repr_str
@@ -169,10 +177,10 @@ class TestConversationState:
         """Test updating processor."""
         state = ConversationState(conversation_id="conv_123")
         state.update_processor("processor_1", metadata={"msg_id": "123"})
-        
+
         assert state.current_processor == "processor_1"
         assert len(state.history) == 1
-        
+
         entry = state.history[0]
         assert entry.name == "processor"
         assert entry.value == "processor_1"
@@ -183,10 +191,10 @@ class TestConversationState:
         """Test updating phase."""
         state = ConversationState(conversation_id="conv_123")
         await state.update_phase("processing", metadata={"step": "1"})
-        
+
         assert state.phase == "processing"
         assert len(state.history) == 1
-        
+
         entry = state.history[0]
         assert entry.name == "phase"
         assert entry.value == "processing"
@@ -203,7 +211,7 @@ class TestConversationState:
 
         state.add_transition_callback(callback)
         await state.update_phase("processing")
-        
+
         assert len(callback_called) == 1
         assert callback_called[0].name == "phase"
         assert callback_called[0].value == "processing"
@@ -224,7 +232,7 @@ class TestConversationState:
         state.add_transition_callback(callback1)
         state.add_transition_callback(callback2)
         await state.update_phase("processing")
-        
+
         assert len(callback1_called) == 1
         assert len(callback2_called) == 1
 
@@ -240,7 +248,7 @@ class TestConversationState:
         state.add_transition_callback(callback)
         state.remove_transition_callback(callback)
         await state.update_phase("processing")
-        
+
         assert len(callback_called) == 0
 
     def test_conversation_state_history(self):
@@ -248,7 +256,7 @@ class TestConversationState:
         state = ConversationState(conversation_id="conv_123")
         state.update_processor("processor_1")
         state.update_processor("processor_2")
-        
+
         history = state.history
         assert len(history) == 2
         assert history[0].value == "processor_1"
@@ -258,15 +266,15 @@ class TestConversationState:
         """Test filtering history by field name."""
         state = ConversationState(conversation_id="conv_123")
         import asyncio
-        
+
         state.update_processor("processor_1")
         asyncio.run(state.update_phase("phase_1"))
         state.update_processor("processor_2")
         asyncio.run(state.update_phase("phase_2"))
-        
+
         processor_history = state.get_history_by_name("processor")
         phase_history = state.get_history_by_name("phase")
-        
+
         assert len(processor_history) == 2
         assert len(phase_history) == 2
         assert all(e.name == "processor" for e in processor_history)
@@ -277,11 +285,11 @@ class TestConversationState:
         state = ConversationState(conversation_id="conv_123")
         state.update_processor("processor_1")
         state.update_processor("processor_2")
-        
+
         latest = state.get_latest_entry("processor")
         assert latest is not None
         assert latest.value == "processor_2"
-        
+
         # Non-existent field should return None
         assert state.get_latest_entry("nonexistent") is None
 
@@ -289,7 +297,7 @@ class TestConversationState:
         """Test repr method."""
         state = ConversationState(conversation_id="conv_123")
         state.update_processor("processor_1")
-        
+
         repr_str = repr(state)
         assert "idle" in repr_str
         assert "processor_1" in repr_str

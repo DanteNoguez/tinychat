@@ -1,8 +1,8 @@
 """Tests for event router."""
+
 import asyncio
 import pytest
 
-from tinychat.events.router import EventRouter
 from tinychat.messages.messages import Message, LLMMessage, UserMessage
 from tinychat.messages.models import LLMServiceType
 from tinychat.conversations.conversation import Conversation
@@ -29,7 +29,9 @@ class TestEventRouter:
 
         processor = DummyProcessor(name="test")
         conversation = Conversation(
-            conversation_id="conv_123", processors=[processor], task_manager=task_manager
+            conversation_id="conv_123",
+            processors=[processor],
+            task_manager=task_manager,
         )
 
         router = conversation.router
@@ -45,7 +47,9 @@ class TestEventRouter:
 
         processor = DummyProcessor(name="test")
         conversation = Conversation(
-            conversation_id="conv_123", processors=[processor], task_manager=task_manager
+            conversation_id="conv_123",
+            processors=[processor],
+            task_manager=task_manager,
         )
         router = conversation.router
 
@@ -54,7 +58,7 @@ class TestEventRouter:
 
         router.register("test_event", handler)
         handlers = router.get_handlers("test_event")
-        
+
         assert len(handlers) == 1
         assert handlers[0].handler == handler
 
@@ -67,7 +71,9 @@ class TestEventRouter:
 
         processor = DummyProcessor(name="test")
         conversation = Conversation(
-            conversation_id="conv_123", processors=[processor], task_manager=task_manager
+            conversation_id="conv_123",
+            processors=[processor],
+            task_manager=task_manager,
         )
         router = conversation.router
 
@@ -87,7 +93,9 @@ class TestEventRouter:
 
         processor = DummyProcessor(name="test")
         conversation = Conversation(
-            conversation_id="conv_123", processors=[processor], task_manager=task_manager
+            conversation_id="conv_123",
+            processors=[processor],
+            task_manager=task_manager,
         )
         router = conversation.router
 
@@ -114,7 +122,9 @@ class TestEventRouter:
 
         processor = DummyProcessor(name="test")
         conversation = Conversation(
-            conversation_id="conv_123", processors=[processor], task_manager=task_manager
+            conversation_id="conv_123",
+            processors=[processor],
+            task_manager=task_manager,
         )
         router = conversation.router
 
@@ -145,7 +155,9 @@ class TestEventRouter:
 
         processor = DummyProcessor(name="test")
         conversation = Conversation(
-            conversation_id="conv_123", processors=[processor], task_manager=task_manager
+            conversation_id="conv_123",
+            processors=[processor],
+            task_manager=task_manager,
         )
         router = conversation.router
 
@@ -155,7 +167,7 @@ class TestEventRouter:
 
         router.unregister("test_event", "my_handler")
         handlers = router.get_handlers("test_event")
-        
+
         assert len(handlers) == 0
 
     @pytest.mark.asyncio
@@ -167,7 +179,9 @@ class TestEventRouter:
 
         processor = DummyProcessor(name="test")
         conversation = Conversation(
-            conversation_id="conv_123", processors=[processor], task_manager=task_manager
+            conversation_id="conv_123",
+            processors=[processor],
+            task_manager=task_manager,
         )
         router = conversation.router
 
@@ -192,7 +206,9 @@ class TestEventRouter:
 
         processor = DummyProcessor(name="test")
         conversation = Conversation(
-            conversation_id="conv_123", processors=[processor], task_manager=task_manager
+            conversation_id="conv_123",
+            processors=[processor],
+            task_manager=task_manager,
         )
         router = conversation.router
 
@@ -203,7 +219,9 @@ class TestEventRouter:
             await asyncio.sleep(0.01)
             handler_called.append(msg)
 
-        msg = LLMMessage(content="test", service=LLMServiceType.OPENAI, conversation_id="conv_123")
+        msg = LLMMessage(
+            content="test", service=LLMServiceType.OPENAI, conversation_id="conv_123"
+        )
         results = await router.emit("test_event", msg)
 
         # Concurrent handlers don't return results immediately
@@ -222,7 +240,9 @@ class TestEventRouter:
 
         processor = DummyProcessor(name="test")
         conversation = Conversation(
-            conversation_id="conv_123", processors=[processor], task_manager=task_manager
+            conversation_id="conv_123",
+            processors=[processor],
+            task_manager=task_manager,
         )
         router = conversation.router
 
@@ -237,10 +257,11 @@ class TestEventRouter:
 
         processor = DummyProcessor(name="test")
         conversation = Conversation(
-            conversation_id="conv_123", processors=[processor], task_manager=task_manager
+            conversation_id="conv_123",
+            processors=[processor],
+            task_manager=task_manager,
         )
         router = conversation.router
 
         repr_str = repr(router)
         assert "EventRouter" in repr_str
-

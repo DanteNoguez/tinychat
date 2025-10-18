@@ -10,14 +10,16 @@ from loguru import logger
 class StateEntry:
     """
     Represents a single state change entry in the history.
-    
+
     Each entry captures what changed, the new value, when it happened,
     and any additional context through metadata.
     """
 
     name: str  # Name of the state field that changed (e.g., "phase", "processor")
     value: Any  # The new value
-    timestamp: int = field(default_factory=time.time_ns) # Nanosecond timestamp of when this change occurred
+    timestamp: int = field(
+        default_factory=time.time_ns
+    )  # Nanosecond timestamp of when this change occurred
     metadata: Dict[str, Any] = field(default_factory=dict)  # Additional context
 
     def __repr__(self) -> str:
@@ -27,10 +29,10 @@ class StateEntry:
 class State(ABC):
     """
     Base class for all state management in tinychat.
-    
+
     States are typed objects with defined fields at initialization.
     All state changes are tracked in an ordered history of StateEntry objects.
-    
+
     Subclasses should:
     - Define typed properties for state fields
     - Call _record_change() when state values are updated
@@ -55,7 +57,7 @@ class State(ABC):
     def add_transition_callback(self, callback: Callable) -> None:
         """
         Register a callback to be invoked on state changes.
-        
+
         Callback signature: async def callback(entry: StateEntry) -> None
         """
         if callback not in self._transition_callbacks:
@@ -71,7 +73,7 @@ class State(ABC):
     ) -> StateEntry:
         """
         Record a state change in the history.
-        
+
         This creates a StateEntry and adds it to the history.
         Should be called by subclasses whenever a state field changes.
         """
@@ -110,7 +112,7 @@ class State(ABC):
 class ConversationState(State):
     """
     Tracks the current phase and processor of a conversation with transition history.
-    
+
     This state manages the flow of a conversation through different phases
     and tracks which processor is currently handling messages.
     """
@@ -135,7 +137,7 @@ class ConversationState(State):
     ) -> None:
         """
         Update the conversation phase.
-        
+
         Records the change in history and notifies callbacks of the transition.
         """
         previous = self._phase
@@ -154,7 +156,7 @@ class ConversationState(State):
     ) -> None:
         """
         Update the current processor handling the conversation.
-        
+
         This is typically called when routing messages to different processors.
         Note: This is synchronous as it's usually called during routing.
         """
@@ -174,13 +176,13 @@ class ConversationState(State):
 class AgentState(State):
     """
     Manages state shared between agents in a conversation.
-    
+
     This state allows agents to coordinate by sharing:
     - Tool call results
     - Intermediate data
     - Context accumulated from multiple sources
     - Any domain-specific data needed for collaboration
-    
+
     Unlike ConversationState which tracks flow control, AgentState
     tracks the actual data agents work with.
     """
@@ -205,7 +207,7 @@ class AgentState(State):
     ) -> None:
         """
         Set a state value and record the change in history.
-        
+
         This is the primary way to update agent state. Each update
         is tracked and can be observed through the history.
         """
@@ -233,9 +235,7 @@ class AgentState(State):
         """Check if a key exists in the state."""
         return key in self._data
 
-    async def delete(
-        self, key: str, metadata: Optional[Dict[str, Any]] = None
-    ) -> None:
+    async def delete(self, key: str, metadata: Optional[Dict[str, Any]] = None) -> None:
         """Delete a key from the state and record the deletion."""
         if key in self._data:
             previous = self._data[key]
@@ -258,7 +258,7 @@ class AgentState(State):
     ) -> None:
         """
         Update multiple state values at once.
-        
+
         Each key-value pair is recorded as a separate entry in the history,
         but they share the same timestamp and metadata.
         """

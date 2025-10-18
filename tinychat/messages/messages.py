@@ -1,9 +1,10 @@
 import time
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Optional
 from dataclasses import dataclass, field
 
 from tinychat.utils.utils import random_id
 from tinychat.messages.models import LLMServiceType
+
 
 @dataclass
 class Message:
@@ -21,17 +22,17 @@ class Message:
         self.metadata = None
         self.parent_id = None
         self.processor_path = []
-    
-    def derive(self, msg_type: type, **kwargs) -> 'Message':
+
+    def derive(self, msg_type: type, **kwargs) -> "Message":
         """
         Create a new message of any type, preserving causal lineage.
-        
+
         Args:
             msg_type: The message class to create (e.g., AIMessage, UserMessage)
             **kwargs: Arguments to pass to the message constructor
-        
+
         Example:
-            ai_msg = user_msg.derive(AIMessage, 
+            ai_msg = user_msg.derive(AIMessage,
                 content="response",
                 agent_id="agent-1",
                 service=LLMServiceType.OPENAI,
@@ -42,7 +43,7 @@ class Message:
         new_msg = msg_type(**kwargs)
         new_msg.parent_id = self.id
         new_msg.processor_path = self.processor_path.copy()
-        
+
         return new_msg
 
 

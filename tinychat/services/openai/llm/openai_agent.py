@@ -6,7 +6,7 @@ from openai import AsyncOpenAI
 from openai.types.chat import ChatCompletionMessage
 
 from tinychat.services.openai.llm.models import OpenAIAgentConfig, Tool
-from tinychat.messages.messages import AIMessage, UserMessage, SystemMessage
+from tinychat.messages.messages import SystemMessage
 
 
 class OpenAIAgent:

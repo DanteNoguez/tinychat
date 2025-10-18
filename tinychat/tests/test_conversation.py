@@ -1,4 +1,5 @@
 """Tests for Conversation class."""
+
 import asyncio
 import pytest
 
@@ -6,7 +7,7 @@ from tinychat.conversations.conversation import Conversation
 from tinychat.messages.messages import Message, LLMMessage
 from tinychat.messages.models import LLMServiceType
 from tinychat.processors.message_processor import MessageProcessor
-from tinychat.asynchronous.manager import TaskManager, TaskManagerParams
+from tinychat.asynchronous.manager import TaskManager
 from tinychat.observers.observer import Observer
 
 
@@ -83,7 +84,9 @@ class TestConversation:
         loop = asyncio.get_event_loop()
         await conversation.setup(loop)
 
-        msg = LLMMessage(content="test", service=LLMServiceType.OPENAI, conversation_id="conv_123")
+        msg = LLMMessage(
+            content="test", service=LLMServiceType.OPENAI, conversation_id="conv_123"
+        )
         result = await conversation.route_to("echo", msg)
 
         assert result is not None
@@ -158,8 +161,9 @@ class TestConversation:
         loop = asyncio.get_event_loop()
         await conversation.setup(loop)
 
-        msg = LLMMessage(content="test", service=LLMServiceType.OPENAI, conversation_id="conv_123")
+        msg = LLMMessage(
+            content="test", service=LLMServiceType.OPENAI, conversation_id="conv_123"
+        )
         await conversation.route_to("echo", msg)
 
         assert conversation.state.current_processor == "echo"
-

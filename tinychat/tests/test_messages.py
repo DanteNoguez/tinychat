@@ -1,5 +1,5 @@
 """Tests for message classes."""
-import pytest
+
 
 from tinychat.messages.messages import (
     Message,
@@ -157,4 +157,3 @@ class TestEventMessage:
         )
         assert msg.source == "processor_a"
         assert msg.destination == "processor_b"
-

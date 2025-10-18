@@ -1,4 +1,5 @@
 """Tests for observer classes."""
+
 import pytest
 
 from tinychat.observers.observer import (
@@ -25,7 +26,7 @@ class TestObserver:
         observer = Observer()
         msg = Message()
         data = MessageReceived(processor=None, message=msg, timestamp=123456)
-        
+
         # Should not raise
         await observer.on_message_received(data)
 
@@ -37,7 +38,7 @@ class TestObserver:
         data = MessageProcessed(
             processor=None, message=msg, result=None, timestamp=123456, duration_ns=1000
         )
-        
+
         # Should not raise
         await observer.on_message_processed(data)
 
@@ -46,10 +47,8 @@ class TestObserver:
         """Test on_processor_called method."""
         observer = Observer()
         msg = Message()
-        data = ProcessorCalled(
-            source=None, target=None, message=msg, timestamp=123456
-        )
-        
+        data = ProcessorCalled(source=None, target=None, message=msg, timestamp=123456)
+
         # Should not raise
         await observer.on_processor_called(data)
 
@@ -64,7 +63,7 @@ class TestObserver:
             timestamp=123456,
             metadata={},
         )
-        
+
         # Should not raise
         await observer.on_state_changed(data)
 
@@ -98,7 +97,11 @@ class TestCustomObserver:
         )
         await observer.on_message_processed(
             MessageProcessed(
-                processor=None, message=msg, result=None, timestamp=123456, duration_ns=1000
+                processor=None,
+                message=msg,
+                result=None,
+                timestamp=123456,
+                duration_ns=1000,
             )
         )
         await observer.on_processor_called(
@@ -115,4 +118,3 @@ class TestCustomObserver:
         )
 
         assert events == ["received", "processed", "called", "state_changed"]
-

@@ -1,4 +1,5 @@
 """Tests for task manager classes."""
+
 import asyncio
 import pytest
 
@@ -19,7 +20,7 @@ class TestTaskManager:
         manager = TaskManager()
         loop = asyncio.get_event_loop()
         params = TaskManagerParams(loop=loop)
-        
+
         manager.setup(params)
         assert manager.get_event_loop() == loop
 
@@ -27,7 +28,7 @@ class TestTaskManager:
     async def test_task_manager_get_event_loop_without_setup(self):
         """Test get_event_loop raises without setup."""
         manager = TaskManager()
-        
+
         with pytest.raises(Exception, match="TaskManager is not setup"):
             manager.get_event_loop()
 
@@ -48,7 +49,7 @@ class TestTaskManager:
         task = manager.create_task(dummy_task(), "test_task")
         assert task is not None
         assert task.get_name() == "test_task"
-        
+
         await task
         assert executed == [True]
 
@@ -65,10 +66,10 @@ class TestTaskManager:
 
         task = manager.create_task(dummy_task(), "test_task")
         tasks = manager.current_tasks()
-        
+
         assert len(tasks) == 1
         assert task in tasks
-        
+
         await task
 
     @pytest.mark.asyncio
@@ -84,7 +85,7 @@ class TestTaskManager:
 
         task = manager.create_task(long_task(), "test_task")
         await manager.cancel_task(task, timeout=0.1)
-        
+
         assert task.cancelled() or task.done()
 
     @pytest.mark.asyncio
@@ -97,4 +98,3 @@ class TestTaskManager:
 
         with pytest.raises(Exception, match="TaskManager is not setup"):
             manager.create_task(dummy_task(), "test_task")
-

@@ -104,7 +104,6 @@ class TaskManager(BaseTaskManager):
         except KeyError as e:
             logger.trace(f"{name}: unable to remove task data (already removed?): {e}")
 
-
     async def cleanup(self):
         for task in self._tasks.values():
             await self.cancel_task(task.task)

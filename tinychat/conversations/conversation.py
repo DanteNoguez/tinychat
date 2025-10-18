@@ -20,20 +20,20 @@ from tinychat.observers.observer import StateChanged, ProcessorCalled
 class Conversation(CompositeProcessor):
     """
     A specialized CompositeProcessor for managing conversations.
-    
+
     Conversation extends CompositeProcessor to add:
     - Conversation-specific state (phase, current processor)
     - Shared agent state for coordination
     - Event router for event-driven routing (optional)
     - State transition callbacks and notifications
-    
+
     Like all CompositeProcessors, sub-processors can call each other directly:
         result = await self.history_processor.process(message)
-    
+
     Or use the route_to convenience method:
         result = await conversation.route_to("history_processor", message)
     """
-    
+
     def __init__(
         self,
         conversation_id: str,
@@ -48,11 +48,11 @@ class Conversation(CompositeProcessor):
         self._task_manager = task_manager or TaskManager()
         self._conversation_state = ConversationState(conversation_id)
         self._agent_state = AgentState(conversation_id, agent_id="shared")
-        
+
         # Override observers from parent
         if observers:
             self._observers = observers
-        
+
         # Optional event router for backward compatibility
         self._router = EventRouter(self) if enable_router else None
         self._setup_complete = False
@@ -92,7 +92,7 @@ class Conversation(CompositeProcessor):
     async def setup(self, loop: asyncio.AbstractEventLoop):
         """
         Initialize the conversation and all sub-processors.
-        
+
         This sets up the conversation as a root composite processor and
         initializes all sub-processors with peer injection.
         """
@@ -108,8 +108,7 @@ class Conversation(CompositeProcessor):
 
         # Setup composite (which sets up all sub-processors and injects peers)
         setup = ProcessorSetup(
-            task_manager=self._task_manager,
-            observers=self._observers
+            task_manager=self._task_manager, observers=self._observers
         )
         await super().setup(setup)
 
@@ -119,14 +118,14 @@ class Conversation(CompositeProcessor):
         """Clean up conversation and all sub-processors."""
         if self._router:
             await self._router.cleanup()
-        
+
         await super().cleanup()
         self._setup_complete = False
 
     async def _process(self, message: Message) -> Optional[Message]:
         """
         Process message through the event router (if enabled).
-        
+
         If router is enabled, delegates to event handlers.
         Otherwise, raises NotImplementedError (subclasses should override or use route_to).
         """
@@ -147,7 +146,7 @@ class Conversation(CompositeProcessor):
     ) -> Optional[Message]:
         """
         Route a message directly to a specific sub-processor by name.
-        
+
         Updates conversation state and invokes the processor.
         """
         logger.trace(
@@ -155,7 +154,9 @@ class Conversation(CompositeProcessor):
         )
 
         # Update conversation state
-        self._conversation_state.update_processor(processor_name, {"message_id": message.id})
+        self._conversation_state.update_processor(
+            processor_name, {"message_id": message.id}
+        )
 
         # Use parent's route_to which tracks composite state
         return await super().route_to(processor_name, message)

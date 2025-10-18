@@ -1,9 +1,10 @@
 """Tests for message processor classes."""
+
 import asyncio
 import pytest
 
-from tinychat.messages.messages import Message, ErrorMessage
-from tinychat.processors.message_processor import MessageProcessor, ProcessorSetup
+from tinychat.messages.messages import Message
+from tinychat.processors.message_processor import MessageProcessor
 from tinychat.asynchronous.manager import TaskManager, TaskManagerParams
 from tinychat.conversations.conversation import Conversation
 
@@ -46,7 +47,9 @@ class TestMessageProcessor:
 
         # Create a minimal conversation
         conversation = Conversation(
-            conversation_id="conv_123", processors=[processor], task_manager=task_manager
+            conversation_id="conv_123",
+            processors=[processor],
+            task_manager=task_manager,
         )
         await conversation.setup(loop)
 
@@ -63,7 +66,9 @@ class TestMessageProcessor:
         task_manager.setup(TaskManagerParams(loop=loop))
 
         conversation = Conversation(
-            conversation_id="conv_123", processors=[processor], task_manager=task_manager
+            conversation_id="conv_123",
+            processors=[processor],
+            task_manager=task_manager,
         )
         await conversation.setup(loop)
         await processor.cleanup()
@@ -79,7 +84,9 @@ class TestMessageProcessor:
         task_manager.setup(TaskManagerParams(loop=loop))
 
         conversation = Conversation(
-            conversation_id="conv_123", processors=[processor], task_manager=task_manager
+            conversation_id="conv_123",
+            processors=[processor],
+            task_manager=task_manager,
         )
         await conversation.setup(loop)
 
@@ -127,7 +134,9 @@ class TestMessageProcessorErrorHandling:
         task_manager.setup(TaskManagerParams(loop=loop))
 
         conversation = Conversation(
-            conversation_id="conv_123", processors=[processor], task_manager=task_manager
+            conversation_id="conv_123",
+            processors=[processor],
+            task_manager=task_manager,
         )
         await conversation.setup(loop)
 
@@ -135,4 +144,3 @@ class TestMessageProcessorErrorHandling:
 
         with pytest.raises(ValueError, match="Processing failed"):
             await processor.process(msg)
-

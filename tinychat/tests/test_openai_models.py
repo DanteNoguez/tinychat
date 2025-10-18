@@ -1,4 +1,5 @@
 """Tests for OpenAI models."""
+
 import pytest
 
 from tinychat.services.openai.llm.models import (
@@ -43,7 +44,7 @@ class TestTool:
     async def test_tool_run_not_implemented(self):
         """Test that Tool.run raises NotImplementedError."""
         tool = Tool(name="test", description="test", parameters=[])
-        
+
         with pytest.raises(NotImplementedError):
             await tool.run()
 
@@ -71,7 +72,7 @@ class TestAgentConfig:
         """Test AgentConfig with optional parameters."""
         param = ToolParameter(name="x", description="test", data_type="string")
         tool = Tool(name="test", description="test", parameters=[param])
-        
+
         config = AgentConfig(
             prompt="You are helpful",
             model_name="gpt-4o",
@@ -93,6 +94,7 @@ class TestOpenAIAgentConfig:
         """Test OpenAIAgentConfig with defaults."""
         # Skip if OPENAI_API_KEY is not set
         import os
+
         if "OPENAI_API_KEY" not in os.environ:
             pytest.skip("OPENAI_API_KEY not set")
 
@@ -118,4 +120,3 @@ class TestOpenAIAgentConfig:
         assert config.max_tokens == 500
         assert config.api_key == "test-key"
         assert config.max_retries == 5
-

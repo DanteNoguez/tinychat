@@ -16,8 +16,7 @@ where processors emit events that trigger other processors dynamically.
 """
 
 import asyncio
-from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from tinychat.conversations.conversation import Conversation
 from tinychat.messages.messages import (
@@ -50,19 +49,34 @@ class DummyDB:
 
     async def get_history(self, conversation_id: str) -> List[LLMMessage]:
         return [
-            SystemMessage(conversation_id=conversation_id, content="You are a helpful assistant."),
-            UserMessage(conversation_id=conversation_id, content="Hi, I need to schedule an appointment"),
-            AIMessage(conversation_id=conversation_id, content="I'd be happy to help! What type of appointment?"),
+            SystemMessage(
+                conversation_id=conversation_id, content="You are a helpful assistant."
+            ),
+            UserMessage(
+                conversation_id=conversation_id,
+                content="Hi, I need to schedule an appointment",
+            ),
+            AIMessage(
+                conversation_id=conversation_id,
+                content="I'd be happy to help! What type of appointment?",
+            ),
         ]
 
     async def save_message(self, conversation_id: str, message: LLMMessage):
         """Save a message to the history."""
         if isinstance(message, UserMessage):
-            print(f"[DB] Saved user message for {conversation_id}: {message.content[:50]}...")
+            print(
+                f"[DB] Saved user message for {conversation_id}: {message.content[:50]}..."
+            )
         elif isinstance(message, AIMessage):
-            print(f"[DB] Saved AI message for {conversation_id}: {message.content[:50]}...")
+            print(
+                f"[DB] Saved AI message for {conversation_id}: {message.content[:50]}..."
+            )
         elif isinstance(message, SystemMessage):
-            print(f"[DB] Saved system message for {conversation_id}: {message.content[:50]}...")
+            print(
+                f"[DB] Saved system message for {conversation_id}: {message.content[:50]}..."
+            )
+
 
 class DummyCRM:
     """Simulates a Customer Relationship Management system."""
@@ -83,9 +97,7 @@ class DummyCRM:
         self, user_id: str, date: str, time: str, appointment_type: str
     ) -> Dict:
         """Schedule a new appointment."""
-        print(
-            f"[CRM] Scheduling {appointment_type} for {user_id} on {date} at {time}"
-        )
+        print(f"[CRM] Scheduling {appointment_type} for {user_id} on {date} at {time}")
         return {"id": "apt_123", "status": "scheduled"}
 
 
@@ -152,7 +164,7 @@ class DummyLLM(OpenAIAgent):
 class ConversationHistoryProcessor(MessageProcessor):
     """
     Manages conversation history storage and retrieval.
-    
+
     Responsibilities:
     - Load previous conversation history for context
     - Save new messages (both user and AI)
@@ -189,7 +201,7 @@ class ConversationHistoryProcessor(MessageProcessor):
 class CRMProcessor(MessageProcessor):
     """
     Integrates with CRM system to enrich messages with user data.
-    
+
     Responsibilities:
     - Fetch user profile and appointments
     - Provide tools for CRM operations (scheduling, etc.)
@@ -207,7 +219,9 @@ class CRMProcessor(MessageProcessor):
         appointments = await self._crm.get_appointments(user_id)
 
         # Emit event when data is refreshed
-        await self.emit_event("crm_data_refreshed", message, payload={"user_id": user_id})
+        await self.emit_event(
+            "crm_data_refreshed", message, payload={"user_id": user_id}
+        )
 
         return SystemMessage(
             content=f"User {user_id} has the following appointments: {appointments}",
@@ -252,7 +266,7 @@ class CRMProcessor(MessageProcessor):
 class SchedulingSubAgent(MessageProcessor):
     """
     Specialized sub-agent that handles appointment scheduling.
-    
+
     Responsibilities:
     - Process scheduling-related requests
     - Execute tool calls via CRM
@@ -338,7 +352,7 @@ class SchedulingSubAgent(MessageProcessor):
 class OrchestratorAgent(MessageProcessor):
     """
     Main orchestrator that analyzes intent and delegates to sub-agents.
-    
+
     Responsibilities:
     - Analyze user intent from enriched context
     - Emit events to trigger appropriate sub-agents
@@ -396,7 +410,7 @@ class OrchestratorAgent(MessageProcessor):
 class HumanInTheLoopProcessor(MessageProcessor):
     """
     Handles errors that require human intervention.
-    
+
     Responsibilities:
     - Catch unrecoverable errors
     - Create tasks for human review
@@ -696,4 +710,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-
