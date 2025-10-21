@@ -6,7 +6,8 @@ from loguru import logger
 
 from tinychat.messages.messages import Message
 from tinychat.observers.observer import BaseObserver, MessageRouted
-from tinychat.processors.message_processor import CompositeProcessor, ProcessorSetup
+from tinychat.processors.message_processor import ProcessorSetup
+from tinychat.processors.composite import CompositeProcessor
 from tinychat.asynchronous.manager import (
     BaseTaskManager,
     TaskManager,
@@ -107,7 +108,7 @@ class Conversation(CompositeProcessor):
             return
 
         data = MessageRouted(
-            source=source, target=target, message=message, timestamp=time.time_ns()
+            source=source, target=target, message=message, timestamp=time.monotonic_ns()
         )
 
         for observer in self._observers:

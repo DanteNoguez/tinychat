@@ -125,7 +125,7 @@ class DBProcessor(MessageProcessor):
             conversation_id=message.conversation_id,
             history=history
         )
-        return await self.crm.process(enriched)  # Call next processor
+        return await self.composite.route(ProcessorType.CRM, enriched)  # Call next processor
 
 class CRMProcessor(MessageProcessor):
     async def _process(self, message: ContextMessage) -> Optional[Message]:
@@ -136,7 +136,7 @@ class CRMProcessor(MessageProcessor):
             history=message.history,
             user_data=user_data
         )
-        return await self.ai.process(enriched)  # Call next processor
+        return await self.composite.route(ProcessorType.AI, enriched)  # Call next processor
 
 class AIProcessor(MessageProcessor):
     async def _process(self, message: ContextMessage) -> Optional[Message]:
@@ -147,15 +147,15 @@ class AIProcessor(MessageProcessor):
 class Conversation(CompositeProcessor):
     def __init__(self):
         super().__init__(processors=[DBProcessor(), CRMProcessor(), AIProcessor()])
-        # CompositeProcessor auto-injects: db.crm, db.ai, crm.db, crm.ai, etc.
+        # CompositeProcessor auto-injects: the composite reference into each processor
 ```
 
 ### Explicit Over Implicit
 
 ```python
 # Good - clear intent
-result = await self.route_to("analyzer", message)
-result = await self.route_to("llm", result)
+result = await self.composite.route(ProcessorType.ANALYZER, message)
+result = await self.composite.route(ProcessorType.LLM, result)
 return EgressMessage(content=result.content)
 
 # Bad - magic routing

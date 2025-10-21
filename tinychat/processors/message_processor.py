@@ -1,6 +1,5 @@
 import asyncio
 import time
-from utils.utils import random_id
 from abc import abstractmethod
 from dataclasses import dataclass
 from typing import Coroutine, List, Optional
@@ -12,19 +11,21 @@ from tinychat.observers.observer import (
     BaseObserver,
     MessageReceived,
     MessageProcessed,
-    MessageRouted,
 )
 from tinychat.asynchronous.manager import (
     BaseTaskManager,
     TaskManager,
     TaskManagerParams,
 )
+from tinychat.utils.utils import random_id
+from tinychat.processors.composite import CompositeProcessor
 
 
 @dataclass
 class ProcessorSetup:
     task_manager: BaseTaskManager
     observers: Optional[List[BaseObserver]] = None
+    composite: Optional["CompositeProcessor"] = None
 
 
 class MessageProcessor:
@@ -45,9 +46,10 @@ class MessageProcessor:
         self._id = random_id()
         self._name = name or f"{self.__class__.__name__}_{self._id}"
         self._task_manager: Optional[BaseTaskManager] = None
-        self._observers: List[BaseObserver] = []
         self._started = False
         self._owns_task_manager = False
+        self._observers: Optional[List[BaseObserver]] = None
+        self._composite: Optional["CompositeProcessor"] = None
 
     @property
     def id(self) -> str:
@@ -66,6 +68,12 @@ class MessageProcessor:
     @property
     def observers(self) -> List[BaseObserver]:
         return self._observers
+
+    @property
+    def composite(self) -> "CompositeProcessor":
+        if not self._composite:
+            raise Exception(f"{self} composite is not initialized")
+        return self._composite
 
     def __str__(self) -> str:
         return self._name
@@ -90,6 +98,9 @@ class MessageProcessor:
 
         if setup.observers:
             self._observers.extend(setup.observers)
+
+        if setup.composite:
+            self._composite = setup.composite
 
         self._started = True
 
@@ -131,7 +142,7 @@ class MessageProcessor:
 
         except Exception as e:
             error_msg = await self.handle_error(e, message)
-            await self._notify_processed(message, error_msg)
+            self.create_task(self._notify_processed(message, error_msg))
             raise
 
     @abstractmethod
@@ -192,132 +203,3 @@ class MessageProcessor:
                 logger.exception(
                     f"Observer {observer} failed on_message_processed: {e}"
                 )
-
-
-class CompositeProcessor(MessageProcessor):
-    """
-    A processor that contains and orchestrates multiple sub-processors.
-
-    Composite processors:
-    - Contain a collection of processors as peers
-    - Inject peer references so processors can call each other directly
-    - Share a task manager with all sub-processors
-    - Notify observers of routing events
-
-    Sub-processors can call each other via injected references:
-        result = await self.other_processor.process(message)
-    """
-
-    def __init__(
-        self,
-        *,
-        name: Optional[str] = None,
-        processors: Optional[List[MessageProcessor]] = None,
-        max_hops: int = 30,
-    ):
-        super().__init__(name=name)
-        self._processors: dict[str, MessageProcessor] = {}
-        self._max_hops = max_hops  # Maximum routing depth to prevent infinite loops
-
-        if processors:
-            for proc in processors:
-                self._processors[proc.name] = proc
-
-    @property
-    def processors(self) -> dict[str, MessageProcessor]:
-        return self._processors
-
-    def add_processor(self, processor: MessageProcessor):
-        self._processors[processor.name] = processor
-
-    def get_processor(self, name: str) -> MessageProcessor:
-        if name not in self._processors:
-            raise KeyError(f"Processor '{name}' not found in {self}")
-        return self._processors[name]
-
-    async def setup(self, setup: ProcessorSetup):
-        """
-        Initialize the composite and all sub-processors.
-
-        This:
-        1. Sets up the composite itself
-        2. Sets up all sub-processors with shared task manager
-        3. Injects peer references so processors can call each other
-        """
-        await super().setup(setup)
-
-        sub_setup = ProcessorSetup(
-            task_manager=self._task_manager,
-            observers=self._observers,
-        )
-
-        for processor in self._processors.values():
-            await processor.setup(sub_setup)
-
-        await self._inject_peer_references()
-
-    async def _inject_peer_references(self):
-        """
-        Inject references to all processors into each processor.
-
-        After this, each processor can call any other via:
-            await self.other_processor.process(message)
-        """
-        for proc_name, processor in self._processors.items():
-            for peer_name, peer in self._processors.items():
-                if peer_name != proc_name:
-                    setattr(processor, peer_name, peer)
-
-                    logger.debug(
-                        f"CompositeProcessor[{self.name}]: Injected {peer_name} into {proc_name} as '{peer_name}'"
-                    )
-
-    async def cleanup(self):
-        for processor in self._processors.values():
-            await processor.cleanup()
-
-        await super().cleanup()
-
-    async def _process(self, message: Message) -> Optional[Message]:
-        """
-        Subclasses should override this to implement routing logic.
-        Alternatively, use route_to() directly without overriding _process.
-        """
-        raise NotImplementedError(
-            f"{self}: CompositeProcessor requires either overriding _process() "
-            "or using route_to() directly"
-        )
-
-    async def route_to(
-        self, processor_name: str, message: Message
-    ) -> Optional[Message]:
-        """
-        Route a message to a specific sub-processor by name.
-
-        This is a convenience method for explicit routing without
-        needing direct references.
-        """
-        processor = self.get_processor(processor_name)
-
-        await self._notify_routed(self, processor, message)
-
-        logger.trace(f"{self}: routing message {message.id} to {processor_name}")
-
-        result = await processor.process(message)
-        return result
-
-    async def _notify_routed(
-        self, source: MessageProcessor, target: MessageProcessor, message: Message
-    ):
-        if not self._observers:
-            return
-
-        data = MessageRouted(
-            source=source, target=target, message=message, timestamp=time.time_ns()
-        )
-
-        for observer in self._observers:
-            try:
-                await observer.on_message_routed(data)
-            except Exception as e:
-                logger.exception(f"Observer {observer} failed on_message_routed: {e}")
