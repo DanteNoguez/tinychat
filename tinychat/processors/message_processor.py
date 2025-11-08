@@ -1,5 +1,4 @@
 import asyncio
-import time
 from abc import abstractmethod
 from dataclasses import dataclass
 from typing import Coroutine, List, Optional
@@ -88,7 +87,10 @@ class MessageProcessor:
             self._owns_task_manager = True
 
         if setup.observers:
-            self._observers.extend(setup.observers)
+            if self._observers:
+                self._observers.extend(setup.observers)
+            else:
+                self._observers = setup.observers
 
         self._started = True
 
@@ -166,7 +168,9 @@ class MessageProcessor:
             return
 
         data = MessageReceived(
-            processor=self, message=message, timestamp=time.monotonic_ns()
+            processor=self,
+            message=message,
+            content=message.content,
         )
 
         for observer in self._observers:
@@ -186,8 +190,7 @@ class MessageProcessor:
         data = MessageProcessed(
             processor=self,
             message=message,
-            result=result,
-            timestamp=time.monotonic_ns(),
+            content=result.content if result else "No result",
         )
 
         for observer in self._observers:
