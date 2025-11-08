@@ -18,14 +18,12 @@ from tinychat.asynchronous.manager import (
     TaskManagerParams,
 )
 from tinychat.utils.utils import random_id
-from tinychat.processors.composite import CompositeProcessor
 
 
 @dataclass
 class ProcessorSetup:
-    task_manager: BaseTaskManager
+    task_manager: BaseTaskManager = TaskManager()
     observers: Optional[List[BaseObserver]] = None
-    composite: Optional["CompositeProcessor"] = None
 
 
 class MessageProcessor:
@@ -46,10 +44,9 @@ class MessageProcessor:
         self._id = random_id()
         self._name = name or f"{self.__class__.__name__}_{self._id}"
         self._task_manager: Optional[BaseTaskManager] = None
+        self._observers: Optional[List[BaseObserver]] = None
         self._started = False
         self._owns_task_manager = False
-        self._observers: Optional[List[BaseObserver]] = None
-        self._composite: Optional["CompositeProcessor"] = None
 
     @property
     def id(self) -> str:
@@ -66,14 +63,8 @@ class MessageProcessor:
         return self._task_manager
 
     @property
-    def observers(self) -> List[BaseObserver]:
+    def observers(self) -> Optional[List[BaseObserver]]:
         return self._observers
-
-    @property
-    def composite(self) -> "CompositeProcessor":
-        if not self._composite:
-            raise Exception(f"{self} composite is not initialized")
-        return self._composite
 
     def __str__(self) -> str:
         return self._name
@@ -98,9 +89,6 @@ class MessageProcessor:
 
         if setup.observers:
             self._observers.extend(setup.observers)
-
-        if setup.composite:
-            self._composite = setup.composite
 
         self._started = True
 
@@ -136,14 +124,13 @@ class MessageProcessor:
 
         try:
             result = await self._process(message)
-
             self.create_task(self._notify_processed(message, result))
             return result
 
         except Exception as e:
             error_msg = await self.handle_error(e, message)
-            self.create_task(self._notify_processed(message, error_msg))
-            raise
+            self.create_task(self._notify_error(message, error_msg))
+            return error_msg
 
     @abstractmethod
     async def _process(self, message: Message) -> Optional[Message]:
@@ -151,19 +138,19 @@ class MessageProcessor:
         Process a message and return the result.
 
         Subclasses must implement this to define their message processing logic.
-        This method receives the message and should return:
+        This method receives a message and should return:
         - A new/modified message
         - The same message passed through
         - None if no result
         """
-        pass
+        ...
 
     async def handle_error(self, error: Exception, message: Message) -> ErrorMessage:
-        logger.error(f"{self}: error processing message {message.id}: {error}")
+        logger.exception(f"{self}: error processing message {message}: {error}")
 
         return ErrorMessage(
             content=str(error),
-            source=self.name,
+            source_message=message,
             fatal=False,
         )
 
@@ -203,3 +190,15 @@ class MessageProcessor:
                 logger.exception(
                     f"Observer {observer} failed on_message_processed: {e}"
                 )
+
+    async def _notify_error(self, message: Message, error_msg: ErrorMessage) -> None:
+        if not self._observers:
+            return
+
+        for observer in self._observers:
+            try:
+                await observer.on_error_message(
+                    source_message=message, error_msg=error_msg
+                )
+            except Exception as e:
+                logger.exception(f"Observer {observer} failed on_error_message: {e}")

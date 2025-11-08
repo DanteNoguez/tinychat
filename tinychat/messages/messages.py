@@ -8,6 +8,7 @@ from tinychat.messages.models import LLMServiceType
 
 @dataclass
 class Message:
+    content: str
     id: str = field(init=False)
     name: str = field(init=False)
     timestamp: int = field(init=False)
@@ -20,21 +21,18 @@ class Message:
 
 @dataclass
 class IngressMessage(Message):
-    content: str
     user_id: Optional[str] = None
     conversation_id: Optional[str] = None
 
 
 @dataclass
 class EgressMessage(Message):
-    content: str
     conversation_id: str
     user_id: Optional[str] = None
 
 
 @dataclass
 class LLMMessage(Message):
-    content: str
     service: LLMServiceType
     conversation_id: str
 
@@ -58,10 +56,8 @@ class SystemMessage(LLMMessage):
 
 @dataclass
 class ErrorMessage(Message):
-    source: str
-    content: str
+    source_message: Message
     fatal: bool = False
-    conversation_id: Optional[str] = None
 
 
 @dataclass
