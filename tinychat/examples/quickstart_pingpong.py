@@ -1,15 +1,15 @@
 import asyncio
 from typing import Optional
 from dataclasses import dataclass
+from loguru import logger
 
 from tinychat.messages.messages import (
     IngressMessage,
     EgressMessage,
-    ErrorMessage,
     Message,
 )
-from tinychat.asynchronous.manager import TaskManager, TaskManagerParams
-from tinychat.processors.message_processor import MessageProcessor
+from tinychat.asynchronous.manager import TaskManagerParams
+from tinychat.processors.message_processor import MessageProcessor, SetupConfig
 from tinychat.processors.message_bus import MessageBus
 from tinychat.observers.observer import (
     BaseObserver,
@@ -32,30 +32,28 @@ class UserMessage(Message):
 
 class LoggingObserver(BaseObserver):
     async def on_message_received(self, message: MessageReceived) -> None:
-        print(f"📨 [{message.processor.name}] Received: {message.message.content}")
+        logger.info(f"📨 [{message.source_processor.name}] Received: {message.content}")
 
     async def on_message_processed(self, message: MessageProcessed) -> None:
-        print(f"✅ [{message.processor.name}] Processed: {message.message.content}")
+        logger.info(f"✅ [{message.source_processor.name}] Returned: {message.content}")
 
-    async def on_error_message(
-        self, source_message: Message, error_msg: ErrorMessage
-    ) -> None:
-        print(f"❌ Error: {error_msg.content}")
+    async def on_exception(self, source_message: Message, exception: Exception) -> None:
+        logger.error(
+            f"❌ [{source_message.name}] Exception: {exception} at {source_message.timestamp}"
+        )
 
 
 class BotProcessor(MessageProcessor):
     async def _process(self, message: Message) -> Optional[Message]:
         if isinstance(message, IngressMessage):
-            print(f"🤖 Bot: Starting conversation with '{message.content}'")
             return BotMessage(
-                content=f"Bot responds to: {message.content}",
+                content="Ok, ping!",
                 iteration=1,
             )
         elif isinstance(message, UserMessage):
             iteration = message.iteration + 1
-            print(f"🤖 Bot: Ping! (iteration {iteration})")
             return BotMessage(
-                content=f"Bot pong #{iteration}",
+                content="Ping back!",
                 iteration=iteration,
             )
         else:
@@ -67,14 +65,12 @@ class UserProcessor(MessageProcessor):
         if isinstance(message, BotMessage):
             # After 2 iterations, return egress
             if message.iteration >= 2:
-                print(f"👤 User: Done after {message.iteration} iterations!")
                 return EgressMessage(
-                    content=f"Conversation complete after {message.iteration} rounds",
+                    content="Final pong!",
                 )
             else:
-                print(f"👤 User: Pong! (iteration {message.iteration})")
                 return UserMessage(
-                    content=f"User ping #{message.iteration}",
+                    content="Pong!",
                     iteration=message.iteration,
                 )
         else:
@@ -82,30 +78,25 @@ class UserProcessor(MessageProcessor):
 
 
 async def main():
-    # Setup task manager
-    loop = asyncio.get_running_loop()
-    task_params = TaskManagerParams(loop=loop)
-    task_manager = TaskManager()
-    task_manager.setup(task_params)
-
-    # Create observer
-    observer = LoggingObserver()
+    # Setup message bus configuration
+    config = SetupConfig(
+        task_manager_params=TaskManagerParams(loop=asyncio.get_running_loop()),
+        observers=[LoggingObserver()],
+    )
 
     # Create processors
     bot = BotProcessor(name="bot")
     user = UserProcessor(name="user")
 
-    # Setup message bus with type-based routing and observer
+    # Setup message bus with type-based routing
     bus = MessageBus(
         handlers={
             IngressMessage: bot,
             BotMessage: user,
             UserMessage: bot,
         },
-        task_manager=task_manager,
-        observers=[observer],
     )
-    await bus.setup()
+    await bus.setup(config)
 
     # Create and process ingress message
     message = IngressMessage(
@@ -113,21 +104,7 @@ async def main():
         conversation_id="pingpong-demo",
     )
 
-    print("=" * 60)
-    print("🎾 Starting Ping-Pong Demo")
-    print(f"Initial message: {message.content}")
-    print("=" * 60)
-    print()
-
-    result = await bus.process(message)
-
-    print()
-    print("=" * 60)
-    if isinstance(result, EgressMessage):
-        print(f"📤 Final Result: {result.content}")
-    else:
-        print(f"Unexpected result: {result}")
-    print("=" * 60)
+    await bus.process(message)
 
 
 if __name__ == "__main__":

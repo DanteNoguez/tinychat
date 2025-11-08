@@ -12,7 +12,7 @@ class ProcessingState(Enum):
 
 class StateManager:
     """
-    Manages processing state for a CompositeProcessor.
+    Manages processing state for a Conversation.
 
     Handles:
     - State transitions (running, paused, error, stopped)
@@ -52,10 +52,6 @@ class StateManager:
 
     async def wait_if_paused(self):
         await self._pause_event.wait()
-
-    def check_stopped(self):
-        if self._state == ProcessingState.STOPPED:
-            raise RuntimeError("Processing is stopped")
 
     def is_running(self) -> bool:
         return self._state == ProcessingState.RUNNING

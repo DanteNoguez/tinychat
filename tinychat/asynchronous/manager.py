@@ -1,5 +1,4 @@
 import asyncio
-from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Coroutine, Dict, Optional, Sequence
 
@@ -16,36 +15,17 @@ class TaskData:
     task: asyncio.Task
 
 
-class BaseTaskManager(ABC):
-    @abstractmethod
-    def setup(self, params: TaskManagerParams):
-        pass
-
-    @abstractmethod
-    def get_event_loop(self) -> asyncio.AbstractEventLoop:
-        pass
-
-    @abstractmethod
-    def create_task(self, coroutine: Coroutine, name: str) -> asyncio.Task:
-        pass
-
-    @abstractmethod
-    async def cancel_task(self, task: asyncio.Task, timeout: Optional[float] = None):
-        pass
-
-    @abstractmethod
-    def current_tasks(self) -> Sequence[asyncio.Task]:
-        pass
-
-
-class TaskManager(BaseTaskManager):
+class TaskManager:
     def __init__(self) -> None:
         self._tasks: Dict[str, TaskData] = {}
         self._params: Optional[TaskManagerParams] = None
 
-    def setup(self, params: TaskManagerParams):
+    async def setup(self, params: TaskManagerParams):
         if not self._params:
             self._params = params
+
+    def is_setup(self) -> bool:
+        return self._params is not None
 
     def get_event_loop(self) -> asyncio.AbstractEventLoop:
         if not self._params:
@@ -58,12 +38,10 @@ class TaskManager(BaseTaskManager):
 
         async def run_coroutine():
             try:
-                await coroutine
-            except asyncio.CancelledError:
-                logger.trace(f"{name}: task cancelled")
-                raise
+                return await coroutine
             except Exception as e:
                 logger.exception(f"{name}: unexpected exception: {e}")
+                raise
 
         task = self._params.loop.create_task(run_coroutine())
         task.set_name(name)
@@ -99,6 +77,7 @@ class TaskManager(BaseTaskManager):
 
     def _task_done_handler(self, task: asyncio.Task):
         name = task.get_name()
+        logger.trace(f"{name}: task done")
         try:
             del self._tasks[name]
         except KeyError as e:

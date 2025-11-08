@@ -1,18 +1,17 @@
 from typing import Optional
+import asyncio
 from loguru import logger
 
 from tinychat.messages.messages import (
     Message,
     IngressMessage,
     EgressMessage,
-    ErrorMessage,
 )
-from tinychat.processors.message_processor import MessageProcessor, ProcessorSetup
-from tinychat.asynchronous.manager import BaseTaskManager, TaskManager
-from tinychat.observers.observer import BaseObserver
+from tinychat.processors.message_processor import MessageProcessor, SetupConfig
+from tinychat.processors.exceptions import MaxHopsExceededError
 
 
-class MessageBus:
+class MessageBus(MessageProcessor):
     """
     Sequential message bus.
 
@@ -23,17 +22,18 @@ class MessageBus:
 
     def __init__(
         self,
+        *,
         handlers: dict[type[Message], MessageProcessor],
-        task_manager: Optional[BaseTaskManager] = None,
-        observers: Optional[list[BaseObserver]] = None,
         max_depth: int = 30,
     ):
+        super().__init__(
+            name="MessageBus",
+        )
         self._handlers = handlers
         self._processors = {p.id: p for p in handlers.values()}
         self._max_depth = max_depth
-        self._task_manager = task_manager or TaskManager()
-        self._observers = observers
         self._setup_complete = False
+        self._current_task: Optional[asyncio.Task] = None
 
         # Reverse map for logging: processor → message types it handles
         self._processor_types: dict[str, list[type[Message]]] = {}
@@ -43,31 +43,29 @@ class MessageBus:
             self._processor_types[processor.id].append(msg_type)
         logger.debug(f"MessageBus: Initialized with topology: {self.get_topology()}")
 
-    async def setup(self):
+    async def setup(self, config: SetupConfig):
         if self._setup_complete:
             return
 
-        setup = ProcessorSetup(
-            task_manager=self._task_manager,
-            observers=self._observers,
-        )
+        self._task_manager = config.task_manager
+        if not self._task_manager.is_setup():
+            await self._task_manager.setup(config.task_manager_params)
+
+        if config.observers:
+            self._observers.extend(config.observers)
 
         for processor in self._processors.values():
-            await processor.setup(setup)
+            await processor.setup(config)
 
         self._setup_complete = True
-
-    @property
-    def observers(self) -> Optional[list[BaseObserver]]:
-        return self._observers
 
     def get_handler(self, message_type: type[Message]) -> Optional[MessageProcessor]:
         return self._handlers.get(message_type)
 
-    async def process(
+    async def _process(
         self,
         message: IngressMessage,
-        source_id: Optional[str] = None,
+        depth: int = 0,
     ) -> Optional[Message]:
         """
         Process message and automatically chain routing.
@@ -75,39 +73,51 @@ class MessageBus:
         Finds handler for message type, processes it, and:
         - If result is None: stops, returns None
         - If result is terminal (EgressMessage): stops, returns it
-        - Otherwise: re-publishes result (recursive chaining)
+        - Otherwise: re-publishes result (iterative chaining)
+        - Stops if interrupted via interrupt_processing()
         """
-        return await self._publish_recursive(message, source_id, depth=0)
+        while depth < self._max_depth:
+            # Get handler for message type
+            handler = self.get_handler(type(message))
+            if not handler:
+                raise ValueError(f"No handler for {message.name}")
 
-    async def _publish_recursive(
-        self,
-        message: Message,
-        source_id: Optional[str],
-        depth: int,
-    ) -> Optional[Message]:
-        if depth >= self._max_depth:
-            raise RuntimeError(
-                f"Maximum routing depth {self._max_depth} exceeded at message {message.name}"
-            )
+            # Process message with cancellation support
+            try:
+                task = self.create_task(
+                    handler.process(message), name=f"process::{handler.name}"
+                )
+                self._current_task = task
+                result = await task
+            except asyncio.CancelledError:
+                return None
+            finally:
+                self._current_task = None
 
-        # Get handler for message type
-        handler = self.get_handler(type(message))
-        if not handler:
-            raise ValueError(f"No handler for {type(message).__name__}")
+            # Terminal conditions
+            if result is None:
+                return None
+            elif isinstance(result, EgressMessage):
+                # Ingress messages signal the end of the chain
+                return result
 
-        # Process message
-        result = await handler.process(message)
+            # Continue chain with result
+            message = result
+            depth += 1
 
-        # Terminal conditions
-        if result is None:
-            return None
-        if isinstance(result, EgressMessage):
-            return result
-        elif isinstance(result, ErrorMessage):
-            return result
+        raise MaxHopsExceededError(
+            f"Maximum routing depth {self._max_depth} exceeded at message {message.name}"
+        )
 
-        # Continue chain: publish result
-        return await self._publish_recursive(result, handler.id, depth + 1)
+    async def interrupt_processing(self):
+        """
+        Interrupt ongoing message processing.
+
+        Cancels the current handler task if one is running.
+        Sets interruption event to prevent new iterations.
+        """
+        if self._current_task:
+            await self._task_manager.cancel_task(self._current_task, timeout=1.0)
 
     def get_topology(self) -> dict[str, list[str]]:
         """

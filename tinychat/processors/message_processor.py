@@ -1,28 +1,29 @@
 import asyncio
 from abc import abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Coroutine, List, Optional
 
 from loguru import logger
 
-from tinychat.messages.messages import ErrorMessage, Message
+from tinychat.messages.messages import Message
 from tinychat.observers.observer import (
     BaseObserver,
     MessageReceived,
     MessageProcessed,
 )
 from tinychat.asynchronous.manager import (
-    BaseTaskManager,
     TaskManager,
     TaskManagerParams,
 )
 from tinychat.utils.utils import random_id
+from tinychat.processors.exceptions import ProcessorException
 
 
 @dataclass
-class ProcessorSetup:
-    task_manager: BaseTaskManager = TaskManager()
-    observers: Optional[List[BaseObserver]] = None
+class SetupConfig:
+    task_manager_params: TaskManagerParams
+    task_manager: TaskManager = TaskManager()
+    observers: List[BaseObserver] = field(default_factory=list)
 
 
 class MessageProcessor:
@@ -39,11 +40,17 @@ class MessageProcessor:
     For inter-processor communication, use CompositeProcessor.
     """
 
-    def __init__(self, *, name: Optional[str] = None):
+    def __init__(
+        self,
+        *,
+        name: Optional[str] = None,
+        task_manager: Optional[TaskManager] = None,
+        observers: Optional[List[BaseObserver]] = None,
+    ):
         self._id = random_id()
         self._name = name or f"{self.__class__.__name__}_{self._id}"
-        self._task_manager: Optional[BaseTaskManager] = None
-        self._observers: Optional[List[BaseObserver]] = None
+        self._task_manager = task_manager
+        self._observers = observers or []
         self._started = False
         self._owns_task_manager = False
 
@@ -56,7 +63,7 @@ class MessageProcessor:
         return self._name
 
     @property
-    def task_manager(self) -> BaseTaskManager:
+    def task_manager(self) -> TaskManager:
         if not self._task_manager:
             raise Exception(f"{self} task manager is not initialized")
         return self._task_manager
@@ -71,33 +78,30 @@ class MessageProcessor:
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(name={self._name})"
 
-    async def setup(self, setup: ProcessorSetup):
+    async def setup(self, config: SetupConfig):
         """
         Initialize the processor with task manager and observers.
 
         If no task manager is provided, creates its own.
         """
-        if setup.task_manager:
-            self._task_manager = setup.task_manager
-            self._owns_task_manager = False
-        else:
-            self._task_manager = TaskManager()
-            loop = asyncio.get_event_loop()
-            self._task_manager.setup(TaskManagerParams(loop=loop))
-            self._owns_task_manager = True
+        if self._started:
+            return
 
-        if setup.observers:
-            if self._observers:
-                self._observers.extend(setup.observers)
-            else:
-                self._observers = setup.observers
+        if not self._task_manager:
+            self._task_manager = config.task_manager
+        if not self._task_manager.is_setup():
+            await self._task_manager.setup(config.task_manager_params)
+
+        if config.observers:
+            self._observers.extend(config.observers)
 
         self._started = True
 
     async def cleanup(self):
-        if self._owns_task_manager and self._task_manager:
-            # TODO: Garbage collection
-            pass
+        if not self._started:
+            return
+
+        await self._task_manager.cleanup()
         self._started = False
 
     def create_task(
@@ -122,24 +126,23 @@ class MessageProcessor:
         - Routing from and to other processors
         """
 
-        self.create_task(
-            self._notify_received(message), name=f"{self}::notify_received"
-        )
+        self.create_task(self._notify_received(message), name="notify_received")
 
         try:
             result = await self._process(message)
             self.create_task(
-                self._notify_processed(message, result),
-                name=f"{self}::notify_processed",
+                self._notify_processed(message, result), name="notify_processed"
             )
             return result
 
         except Exception as e:
-            error_msg = await self.handle_error(e, message)
-            self.create_task(
-                self._notify_error(message, error_msg), name=f"{self}::notify_error"
+            processor_exception = ProcessorException(
+                source_message=message, source_processor=self, details=str(e)
             )
-            return error_msg
+            self.create_task(
+                self._notify_error(message, processor_exception), name="notify_error"
+            )
+            raise processor_exception
 
     @abstractmethod
     async def _process(self, message: Message) -> Optional[Message]:
@@ -154,28 +157,19 @@ class MessageProcessor:
         """
         ...
 
-    async def handle_error(self, error: Exception, message: Message) -> ErrorMessage:
-        logger.exception(f"{self}: error processing message {message}: {error}")
-
-        return ErrorMessage(
-            content=str(error),
-            source_message=message,
-            fatal=False,
-        )
-
     async def _notify_received(self, message: Message) -> None:
         if not self._observers:
             return
 
         data = MessageReceived(
-            processor=self,
-            message=message,
+            source_processor=self,
+            source_message=message,
             content=message.content,
         )
 
         for observer in self._observers:
             try:
-                await observer.on_message_received(data)
+                return await observer.on_message_received(data)
             except Exception as e:
                 logger.exception(f"Observer {observer} failed on_message_received: {e}")
 
@@ -188,27 +182,27 @@ class MessageProcessor:
             return
 
         data = MessageProcessed(
-            processor=self,
-            message=message,
-            content=result.content if result else "No result",
+            source_processor=self,
+            source_message=message,
+            content=result.content if result else None,
         )
 
         for observer in self._observers:
             try:
-                await observer.on_message_processed(data)
+                return await observer.on_message_processed(data)
             except Exception as e:
                 logger.exception(
                     f"Observer {observer} failed on_message_processed: {e}"
                 )
 
-    async def _notify_error(self, message: Message, error_msg: ErrorMessage) -> None:
+    async def _notify_error(self, message: Message, exception: Exception) -> None:
         if not self._observers:
             return
 
         for observer in self._observers:
             try:
-                await observer.on_error_message(
-                    source_message=message, error_msg=error_msg
+                return await observer.on_exception(
+                    source_message=message, exception=exception
                 )
             except Exception as e:
-                logger.exception(f"Observer {observer} failed on_error_message: {e}")
+                logger.exception(f"Observer {observer} failed on_exception: {e}")

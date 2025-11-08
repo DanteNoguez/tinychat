@@ -55,11 +55,5 @@ class SystemMessage(LLMMessage):
 
 
 @dataclass
-class ErrorMessage(Message):
-    source_message: Message
-    fatal: bool = False
-
-
-@dataclass
 class ControlMessage(Message):
     pass

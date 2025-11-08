@@ -6,19 +6,41 @@ from tinychat.messages.messages import (
     EgressMessage,
     Message,
 )
-from tinychat.asynchronous.manager import TaskManager, TaskManagerParams
-from tinychat.processors.message_processor import MessageProcessor
+from loguru import logger
+from tinychat.asynchronous.manager import TaskManagerParams
+from tinychat.processors.message_processor import MessageProcessor, SetupConfig
 from tinychat.processors.message_bus import MessageBus
+from tinychat.observers.observer import BaseObserver, MessageReceived, MessageProcessed
+
+from tinychat.utils.logging import configure_pretty_logging
+
+configure_pretty_logging(debug_level=10)
 
 
 class EchoMessage(Message):
     pass
 
 
+class LoggingObserver(BaseObserver):
+    async def on_message_received(self, message: MessageReceived) -> None:
+        logger.info(
+            f"📨 [{message.source_processor.name}] Received: {message.source_message.name} with content {message.content} at {message.source_message.timestamp}"
+        )
+
+    async def on_message_processed(self, message: MessageProcessed) -> None:
+        logger.info(
+            f"✅ [{message.source_processor.name}] Processed: {message.source_message.name} with result {message.content} at {message.source_message.timestamp}"
+        )
+
+    async def on_exception(self, source_message: Message, exception: Exception) -> None:
+        logger.error(
+            f"❌ [{source_message.name}] Exception: {exception} at {source_message.timestamp}"
+        )
+
+
 class EchoProcessor(MessageProcessor):
     async def _process(self, message: Message) -> Optional[Message]:
         if isinstance(message, IngressMessage):
-            print(f"📥 Echo: Received '{message.content}'")
             return EchoMessage(
                 content=message.content,
             )
@@ -29,7 +51,6 @@ class EchoProcessor(MessageProcessor):
 class TransformerProcessor(MessageProcessor):
     async def _process(self, message: Message) -> Optional[Message]:
         if isinstance(message, EchoMessage):
-            print(f"🔄 Transformer: Received '{message.content}'")
             return EgressMessage(
                 content="Transformed!",
             )
@@ -39,11 +60,10 @@ class TransformerProcessor(MessageProcessor):
 
 async def main():
     # Get the running event loop and setup task manager
-    loop = asyncio.get_running_loop()
-    task_params = TaskManagerParams(loop=loop)
-    task_manager = TaskManager()
-    task_manager.setup(task_params)
-
+    config = SetupConfig(
+        task_manager_params=TaskManagerParams(loop=asyncio.get_running_loop()),
+        observers=[LoggingObserver()],
+    )
     # Create processors
     echo = EchoProcessor(name="echo")
     transformer = TransformerProcessor(name="transformer")
@@ -54,9 +74,8 @@ async def main():
             IngressMessage: echo,
             EchoMessage: transformer,
         },
-        task_manager=task_manager,
     )
-    await bus.setup()
+    await bus.setup(config)
 
     # Create and process ingress message
     message = IngressMessage(
@@ -64,13 +83,7 @@ async def main():
         conversation_id="demo",
     )
 
-    print(f"Ingress: {message.content}")
-    result = await bus.process(message)
-
-    if isinstance(result, EgressMessage):
-        print(f"📤 Bot: {result.content}")
-    else:
-        print(f"Unexpected result: {result}")
+    await bus.process(message)
 
 
 if __name__ == "__main__":
