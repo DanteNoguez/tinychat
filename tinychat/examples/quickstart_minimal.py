@@ -1,52 +1,76 @@
-"""
-tinychat Minimal Example
-=========================
-
-The simplest possible echo bot - demonstrates core architecture.
-"""
-
 import asyncio
 from typing import Optional
 
-from tinychat.conversations.conversation import Conversation
-from tinychat.messages.messages import UserMessage, AIMessage, Message, LLMServiceType
+from tinychat.messages.messages import (
+    IngressMessage,
+    EgressMessage,
+    Message,
+)
+from tinychat.asynchronous.manager import TaskManager, TaskManagerParams
 from tinychat.processors.message_processor import MessageProcessor
+from tinychat.processors.message_bus import MessageBus
+
+
+class EchoMessage(Message):
+    pass
 
 
 class EchoProcessor(MessageProcessor):
     async def _process(self, message: Message) -> Optional[Message]:
-        if isinstance(message, UserMessage):
-            return AIMessage(
+        if isinstance(message, IngressMessage):
+            print(f"📥 Echo: Received '{message.content}'")
+            return EchoMessage(
                 content=message.content,
-                service=message.service,
-                conversation_id=message.conversation_id,
-                agent_id="echo",
             )
-        return message
+        else:
+            raise ValueError(f"Unexpected message: {message}")
 
 
-class EchoBot(Conversation):
+class TransformerProcessor(MessageProcessor):
     async def _process(self, message: Message) -> Optional[Message]:
-        return await self.route_to("echo", message)
+        if isinstance(message, EchoMessage):
+            print(f"🔄 Transformer: Received '{message.content}'")
+            return EgressMessage(
+                content="Transformed!",
+            )
+        else:
+            raise ValueError(f"Unexpected message: {message}")
 
 
 async def main():
-    bot = EchoBot(conversation_id="demo", processors=[EchoProcessor(name="echo")])
+    # Get the running event loop and setup task manager
+    loop = asyncio.get_running_loop()
+    task_params = TaskManagerParams(loop=loop)
+    task_manager = TaskManager()
+    task_manager.setup(task_params)
 
-    loop = asyncio.get_event_loop()
-    await bot.setup(loop)
+    # Create processors
+    echo = EchoProcessor(name="echo")
+    transformer = TransformerProcessor(name="transformer")
 
-    message = UserMessage(
+    # Setup message bus with type-based routing
+    bus = MessageBus(
+        handlers={
+            IngressMessage: echo,
+            EchoMessage: transformer,
+        },
+        task_manager=task_manager,
+    )
+    await bus.setup()
+
+    # Create and process ingress message
+    message = IngressMessage(
         content="Hello, tinychat!",
-        service=LLMServiceType.OPENAI,
-        conversation_id=bot.conversation_id,
+        conversation_id="demo",
     )
 
-    print(f"User: {message.content}")
-    response = await bot.process(message)
-    print(f"Bot: {response.content}")
+    print(f"Ingress: {message.content}")
+    result = await bus.process(message)
 
-    await bot.cleanup()
+    if isinstance(result, EgressMessage):
+        print(f"📤 Bot: {result.content}")
+    else:
+        print(f"Unexpected result: {result}")
 
 
 if __name__ == "__main__":

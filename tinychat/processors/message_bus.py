@@ -43,9 +43,7 @@ class MessageBus:
             self._processor_types[processor.id].append(msg_type)
         logger.debug(f"MessageBus: Initialized with topology: {self.get_topology()}")
 
-        self._task_manager.create_task(self._setup())
-
-    async def _setup(self):
+    async def setup(self):
         if self._setup_complete:
             return
 

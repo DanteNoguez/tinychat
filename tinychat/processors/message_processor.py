@@ -120,16 +120,23 @@ class MessageProcessor:
         - Routing from and to other processors
         """
 
-        self.create_task(self._notify_received(message))
+        self.create_task(
+            self._notify_received(message), name=f"{self}::notify_received"
+        )
 
         try:
             result = await self._process(message)
-            self.create_task(self._notify_processed(message, result))
+            self.create_task(
+                self._notify_processed(message, result),
+                name=f"{self}::notify_processed",
+            )
             return result
 
         except Exception as e:
             error_msg = await self.handle_error(e, message)
-            self.create_task(self._notify_error(message, error_msg))
+            self.create_task(
+                self._notify_error(message, error_msg), name=f"{self}::notify_error"
+            )
             return error_msg
 
     @abstractmethod

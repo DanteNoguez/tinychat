@@ -27,7 +27,7 @@ class IngressMessage(Message):
 
 @dataclass
 class EgressMessage(Message):
-    conversation_id: str
+    conversation_id: Optional[str] = None
     user_id: Optional[str] = None
 
 
