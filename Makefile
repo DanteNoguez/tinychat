@@ -4,7 +4,7 @@ PYTHON_FILES=tinychat/
 all: help
 
 run:
-	@uv run python tinychat/examples/quickstarts/base.py
+	@uv run python tinychat/examples/quickstart_pingpong.py
 
 test:
 	@uv run pytest tinychat/tests/ -v
@@ -26,4 +26,4 @@ help:
 	@echo 'lint                - run linters'
 	@echo 'format              - format code with ruff'
 	@echo 'test                - run tests'
-	@echo 'run                 - run example app'
+	@echo 'run                 - run ping pong example'
