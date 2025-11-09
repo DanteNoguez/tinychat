@@ -24,18 +24,18 @@ class EchoMessage(Message):
 class LoggingObserver(BaseObserver):
     async def on_message_received(self, message: MessageReceived) -> None:
         logger.info(
-            f"📨 [{message.source_processor.name}] \
-                Received: {message.source_message.name} \
-                with content {message.content} \
-                at {message.source_message.timestamp}"
+            f"📨 [{message.source_processor.name}] "
+            f"Received: {message.source_message.name} "
+            f"with content {message.content} "
+            f"at {message.source_message.timestamp}"
         )
 
     async def on_message_processed(self, message: MessageProcessed) -> None:
         logger.info(
-            f"✅ [{message.source_processor.name}] \
-                Processed: {message.source_message.name} \
-                with result {message.content} \
-                at {message.source_message.timestamp}"
+            f"✅ [{message.source_processor.name}] "
+            f"Processed: {message.source_message.name} "
+            f"with result {message.content} "
+            f"at {message.source_message.timestamp}"
         )
 
     async def on_exception(self, source_message: Message, exception: Exception) -> None:
