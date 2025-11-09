@@ -12,10 +12,6 @@ from tinychat.processors.message_processor import MessageProcessor, SetupConfig
 from tinychat.processors.composite import CompositeProcessor
 from tinychat.observers.observer import BaseObserver, MessageReceived, MessageProcessed
 
-from tinychat.utils.logging import configure_pretty_logging
-
-configure_pretty_logging(debug_level=10)
-
 
 class EchoMessage(Message):
     pass
