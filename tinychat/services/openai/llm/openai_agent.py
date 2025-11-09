@@ -112,7 +112,7 @@ class OpenAIAgent:
         # Format and add assistant message to history
         for output_item in response.output:
             if output_item.type == "message":
-                content = ""  # TODO: raise an error fi there's no content
+                content = ""  # TODO: raise an error if there's no content
                 for content_item in output_item.content:
                     if content_item.type == "output_text":
                         content += content_item.text
@@ -137,6 +137,4 @@ class OpenAIAgent:
         """
         messages = self.prompt + messages
         await self.generate_response_async(messages, depth=0)
-
-        # Return complete conversation history
         return messages

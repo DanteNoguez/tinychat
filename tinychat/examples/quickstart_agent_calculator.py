@@ -24,7 +24,7 @@ from tinychat.services.openai.llm.models import OpenAIAgentConfig, Tool, ToolPar
 from tinychat.utils.logging import configure_pretty_logging
 
 
-# Trace level logging allows us to see LLM messages in the console.
+# Trace level logging allows us to see LLM behavior in the console.
 configure_pretty_logging(debug_level=5)
 
 
