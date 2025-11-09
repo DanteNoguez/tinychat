@@ -26,9 +26,7 @@ class MessageBus(MessageProcessor):
         handlers: dict[type[Message], MessageProcessor],
         max_depth: int = 30,
     ):
-        super().__init__(
-            name="MessageBus",
-        )
+        super().__init__()
         self._handlers = handlers
         self._processors = {p.id: p for p in handlers.values()}
         self._max_depth = max_depth
