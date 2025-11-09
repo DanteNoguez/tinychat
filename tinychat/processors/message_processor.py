@@ -45,11 +45,13 @@ class MessageProcessor:
         name: Optional[str] = None,
         task_manager: Optional[TaskManager] = None,
         observers: Optional[List[BaseObserver]] = None,
+        output_types: Optional[set[type[Message]]] = None,
     ):
         self._id = random_id()
         self._name = name or f"{self.__class__.__name__}_{self._id}"
         self._task_manager = task_manager
         self._observers = observers or []
+        self._output_types = output_types
         self._started = False
         self._owns_task_manager = False
 
@@ -70,6 +72,10 @@ class MessageProcessor:
     @property
     def observers(self) -> Optional[List[BaseObserver]]:
         return self._observers
+
+    @property
+    def output_types(self) -> Optional[set[type[Message]]]:
+        return self._output_types
 
     def __str__(self) -> str:
         return self._name

@@ -1,4 +1,5 @@
 from typing import Optional
+from dataclasses import dataclass
 import asyncio
 from loguru import logger
 
@@ -8,6 +9,29 @@ from tinychat.messages.messages import (
 )
 from tinychat.processors.message_processor import MessageProcessor, SetupConfig
 from tinychat.processors.exceptions import MaxHopsExceededError
+
+
+@dataclass(frozen=True)
+class ProcessorNode:
+    """Information about a processor in the topology graph."""
+
+    name: str
+    handles: list[str]
+    produces: list[str]
+
+
+@dataclass(frozen=True)
+class Topology:
+    """Topology graph of a CompositeProcessor."""
+
+    nodes: list[ProcessorNode]
+
+    def get_node(self, name: str) -> Optional[ProcessorNode]:
+        """Get node by processor name."""
+        for node in self.nodes:
+            if node.name == name:
+                return node
+        return None
 
 
 class CompositeProcessor(MessageProcessor):
@@ -25,8 +49,11 @@ class CompositeProcessor(MessageProcessor):
         *,
         handlers: dict[type[Message], MessageProcessor],
         max_hops: int = 30,
+        output_types: set[type[Message]] | None = None,
     ):
-        super().__init__()
+        super().__init__(
+            output_types=output_types,
+        )
         self._handlers = handlers
         self._processors = {p.id: p for p in handlers.values()}
         self._max_hops = max_hops
@@ -39,9 +66,14 @@ class CompositeProcessor(MessageProcessor):
             if processor.id not in self._processor_types:
                 self._processor_types[processor.id] = []
             self._processor_types[processor.id].append(msg_type)
-        logger.debug(
-            f"CompositeProcessor: Initialized with topology: {self.get_topology()}"
-        )
+        # Validate topology if processors declare output types
+        self._validate_topology()
+
+        logger.debug(f"[{self}] Topology: ")
+        for node in self.topology.nodes:
+            logger.debug(
+                f"{node.name}: handles={node.handles}, produces={node.produces}"
+            )
 
     async def setup(self, config: SetupConfig):
         if self._setup_complete:
@@ -122,15 +154,69 @@ class CompositeProcessor(MessageProcessor):
         if self._current_task:
             await self._task_manager.cancel_task(self._current_task, timeout=1.0)
 
-    def get_topology(self) -> dict[str, list[str]]:
+    def _validate_topology(self) -> None:
         """
-        Get topology map for visualization/debugging.
+        Validate topology if processors declare output types.
+
+        Checks that all declared output types have handlers registered.
+        Terminal types (None, EgressMessage) are excluded from validation.
+        Processors without declared output_types are skipped.
+        """
+        unhandled_types: set[tuple[str, str]] = set()
+        terminal_types = {type(None), EgressMessage}
+
+        for processor in self._processors.values():
+            if processor.output_types is None:
+                continue
+
+            for output_type in processor.output_types:
+                if output_type in terminal_types:
+                    continue
+                if output_type not in self._handlers:
+                    unhandled_types.add((processor.name, output_type.__name__))
+
+        if unhandled_types:
+            error_lines = [
+                f"  - {proc} produces {msg_type} (no handler registered)"
+                for proc, msg_type in sorted(unhandled_types)
+            ]
+            raise ValueError(
+                "Topology validation failed. Unhandled message types:\n"
+                + "\n".join(error_lines)
+            )
+
+    @property
+    def topology(self) -> Topology:
+        """
+        Get topology graph for visualization/debugging.
 
         Returns:
-            Dictionary mapping processor names to message types they handle
+            Topology object with nodes representing each processor and their
+            input/output types. Output types are included when declared via
+            output_types parameter. Terminal types (EgressMessage, None) are
+            shown in visualization.
         """
-        topology = {}
+        nodes = []
         for processor_id, msg_types in self._processor_types.items():
             processor = self._processors[processor_id]
-            topology[processor.name] = [mt.__name__ for mt in msg_types]
-        return topology
+            handles = [mt.__name__ for mt in msg_types]
+
+            if processor.output_types is not None:
+                produces = []
+                for ot in processor.output_types:
+                    if ot is type(None):
+                        produces.append("None")
+                    else:
+                        produces.append(ot.__name__)
+            else:
+                produces = ["undefined"]
+
+            nodes.append(
+                ProcessorNode(
+                    name=processor.name,
+                    handles=handles,
+                    produces=produces,
+                )
+            )
+
+        return Topology(nodes=nodes)

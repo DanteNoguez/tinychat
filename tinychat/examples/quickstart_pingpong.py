@@ -84,9 +84,9 @@ async def main():
         observers=[LoggingObserver()],
     )
 
-    # Create processors
-    bot = BotProcessor(name="bot")
-    user = UserProcessor(name="user")
+    # Create processors with output type declarations
+    bot = BotProcessor(name="bot", output_types={BotMessage})
+    user = UserProcessor(name="user", output_types={UserMessage, EgressMessage})
 
     # Setup message bus with type-based routing
     bus = CompositeProcessor(

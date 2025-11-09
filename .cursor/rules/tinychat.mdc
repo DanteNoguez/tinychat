@@ -89,6 +89,23 @@ await processor.setup(config)
 - `cleanup()` available for resource management
 - Processors can be interrupted via `interrupt_processing()` on CompositeProcessor
 
+### Topology Validation
+
+Processors can declare output types for topology validation:
+
+```python
+enricher = EnricherProcessor(output_types={EnrichedData})
+analyzer = AnalyzerProcessor(output_types={ProcessedResult})
+formatter = FormatterProcessor(output_types={EgressMessage})
+```
+
+**Key points:**
+- `output_types` is optional - processors without it skip validation
+- `CompositeProcessor` validates at construction that all declared output types have handlers
+- Terminal types (`None`, `EgressMessage`) are excluded from validation but shown in topology
+- Validation helps catch topology errors early for complex graphs
+- Use `composite.get_topology()` to visualize the graph structure
+
 ## Code Requirements
 
 - Type everything
@@ -160,10 +177,11 @@ class GPT4Processor(OpenAIProcessor):
 CompositeProcessor routes messages through a topology of handlers based on message types:
 
 ```python
-# Define processors for each stage
-crm = CRMProcessor()
-db = DBProcessor()
-llm = LLMProcessor()
+# Define processors for each stage with output types for validation
+crm = CRMProcessor(output_types={CRMMessage})
+db = DBProcessor(output_types={EnrichedMessage})
+llm = LLMProcessor(output_types={ReplyMessage})
+formatter = FormatterProcessor(output_types={EgressMessage})
 
 # Build routing topology via type-based handlers
 chatbot = CompositeProcessor(
@@ -195,11 +213,19 @@ class RouterProcessor(MessageProcessor):
         else:
             return StandardMessage(content=message.content)
 
+# Declare all possible output types for validation
+router = RouterProcessor(
+    output_types={ApprovalMessage, UrgentMessage, StandardMessage}
+)
+approver = ApproverProcessor(output_types={EgressMessage})
+escalator = EscalatorProcessor(output_types={EgressMessage})
+handler = HandlerProcessor(output_types={EgressMessage})
+
 # Same processor routes to different handlers
 workflow = CompositeProcessor(
     handlers={
-        InputMessage: router,          # 1 input type
-        ApprovalMessage: approver,     # 3 possible outputs
+        InputMessage: router,          # 1 input type, 3 possible outputs
+        ApprovalMessage: approver,
         UrgentMessage: escalator,
         StandardMessage: handler,
     },

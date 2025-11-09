@@ -83,8 +83,10 @@ class LoggingObserver(BaseObserver):
 class CRMProcessor(MessageProcessor):
     """Processor that retrieves user information from a CRM."""
 
-    def __init__(self, name: str = "CRM"):
-        super().__init__(name=name)
+    def __init__(
+        self, name: str = "CRM", output_types: set[type[Message]] | None = None
+    ):
+        super().__init__(name=name, output_types=output_types)
         # Mock user database
         self._users = {
             "user_123": {
@@ -118,8 +120,10 @@ class CRMProcessor(MessageProcessor):
 class DBProcessor(MessageProcessor):
     """Processor that retrieves chat history from a database."""
 
-    def __init__(self, name: str = "DB"):
-        super().__init__(name=name)
+    def __init__(
+        self, name: str = "DB", output_types: set[type[Message]] | None = None
+    ):
+        super().__init__(name=name, output_types=output_types)
         # Mock chat history database
         self._history = {
             "user_123": [
@@ -209,13 +213,15 @@ async def main():
         observers=[LoggingObserver()],
     )
 
-    # Create enrichment processors (CRM → DB)
-    crm = CRMProcessor()
-    db = DBProcessor()
+    # Create enrichment processors (CRM → DB) with output type declarations
+    crm = CRMProcessor(output_types={CRMMessage})
+    db = DBProcessor(output_types={EnrichedMessage})
 
-    # Create agent processors
-    orchestrator = OrchestratorAgent(name="orchestrator")
-    reply_agent = ReplyAgent(name="reply_agent")
+    # Create agent processors with output type declarations
+    orchestrator = OrchestratorAgent(
+        name="orchestrator", output_types={ReplyRequestMessage, EgressMessage}
+    )
+    reply_agent = ReplyAgent(name="reply_agent", output_types={ReplyMessage})
 
     # Create inner message bus for agents with its own max_hops limit
     # Flow inside agent bus: EnrichedMessage → Orchestrator → ReplyRequest → ReplyAgent → Reply → Orchestrator → Egress
@@ -226,6 +232,7 @@ async def main():
             ReplyMessage: orchestrator,
         },
         max_hops=10,  # Agents have their own hop limit
+        output_types={EgressMessage},
     )
 
     # Setup outer message bus with type-based routing
@@ -237,6 +244,7 @@ async def main():
             EnrichedMessage: agent_bus,
         },
         max_hops=5,  # Outer bus hop limit
+        output_types={EgressMessage},
     )
     await bus.setup(config)
 
