@@ -4,9 +4,8 @@ import asyncio
 import pytest
 
 from tinychat.messages.messages import Message
-from tinychat.processors.message_processor import MessageProcessor
+from tinychat.processors.message_processor import MessageProcessor, SetupConfig
 from tinychat.asynchronous.manager import TaskManager, TaskManagerParams
-from tinychat.conversations.conversation import Conversation
 
 
 class SimpleProcessor(MessageProcessor):
@@ -41,19 +40,14 @@ class TestMessageProcessor:
     async def test_message_processor_setup(self):
         """Test processor setup."""
         processor = SimpleProcessor(name="test_processor")
-        task_manager = TaskManager()
-        loop = asyncio.get_event_loop()
-        task_manager.setup(TaskManagerParams(loop=loop))
+        loop = asyncio.get_running_loop()
 
-        # Create a minimal conversation
-        conversation = Conversation(
-            conversation_id="conv_123",
-            processors=[processor],
-            task_manager=task_manager,
+        config = SetupConfig(
+            task_manager=TaskManager(),
+            task_manager_params=TaskManagerParams(loop=loop),
         )
-        await conversation.setup(loop)
+        await processor.setup(config)
 
-        assert processor._conversation is not None
         assert processor._task_manager is not None
         assert processor._started is True
 
@@ -61,16 +55,13 @@ class TestMessageProcessor:
     async def test_message_processor_cleanup(self):
         """Test processor cleanup."""
         processor = SimpleProcessor(name="test_processor")
-        task_manager = TaskManager()
-        loop = asyncio.get_event_loop()
-        task_manager.setup(TaskManagerParams(loop=loop))
+        loop = asyncio.get_running_loop()
 
-        conversation = Conversation(
-            conversation_id="conv_123",
-            processors=[processor],
-            task_manager=task_manager,
+        config = SetupConfig(
+            task_manager=TaskManager(),
+            task_manager_params=TaskManagerParams(loop=loop),
         )
-        await conversation.setup(loop)
+        await processor.setup(config)
         await processor.cleanup()
 
         assert processor._started is False
@@ -79,18 +70,15 @@ class TestMessageProcessor:
     async def test_message_processor_process(self):
         """Test processing a message."""
         processor = SimpleProcessor(name="test_processor")
-        task_manager = TaskManager()
-        loop = asyncio.get_event_loop()
-        task_manager.setup(TaskManagerParams(loop=loop))
+        loop = asyncio.get_running_loop()
 
-        conversation = Conversation(
-            conversation_id="conv_123",
-            processors=[processor],
-            task_manager=task_manager,
+        config = SetupConfig(
+            task_manager=TaskManager(),
+            task_manager_params=TaskManagerParams(loop=loop),
         )
-        await conversation.setup(loop)
+        await processor.setup(config)
 
-        msg = Message()
+        msg = Message(content="test message")
         result = await processor.process(msg)
 
         assert result is not None
@@ -100,9 +88,6 @@ class TestMessageProcessor:
     async def test_message_processor_properties_without_setup(self):
         """Test accessing properties without setup raises."""
         processor = SimpleProcessor()
-
-        with pytest.raises(Exception, match="conversation is not initialized"):
-            _ = processor.conversation
 
         with pytest.raises(Exception, match="task manager is not initialized"):
             _ = processor.task_manager
@@ -129,18 +114,15 @@ class TestMessageProcessorErrorHandling:
     async def test_message_processor_handle_error(self):
         """Test error handling in processor."""
         processor = FailingProcessor(name="failing_processor")
-        task_manager = TaskManager()
-        loop = asyncio.get_event_loop()
-        task_manager.setup(TaskManagerParams(loop=loop))
+        loop = asyncio.get_running_loop()
 
-        conversation = Conversation(
-            conversation_id="conv_123",
-            processors=[processor],
-            task_manager=task_manager,
+        config = SetupConfig(
+            task_manager=TaskManager(),
+            task_manager_params=TaskManagerParams(loop=loop),
         )
-        await conversation.setup(loop)
+        await processor.setup(config)
 
-        msg = Message()
+        msg = Message(content="test message")
 
         with pytest.raises(ValueError, match="Processing failed"):
             await processor.process(msg)

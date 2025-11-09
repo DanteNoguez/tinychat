@@ -18,10 +18,10 @@ class TestTaskManager:
     async def test_task_manager_setup(self):
         """Test task manager setup."""
         manager = TaskManager()
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         params = TaskManagerParams(loop=loop)
 
-        manager.setup(params)
+        await manager.setup(params)
         assert manager.get_event_loop() == loop
 
     @pytest.mark.asyncio
@@ -36,9 +36,9 @@ class TestTaskManager:
     async def test_task_manager_create_task(self):
         """Test creating a task."""
         manager = TaskManager()
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         params = TaskManagerParams(loop=loop)
-        manager.setup(params)
+        await manager.setup(params)
 
         executed = []
 
@@ -57,9 +57,9 @@ class TestTaskManager:
     async def test_task_manager_current_tasks(self):
         """Test tracking current tasks."""
         manager = TaskManager()
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         params = TaskManagerParams(loop=loop)
-        manager.setup(params)
+        await manager.setup(params)
 
         async def dummy_task():
             await asyncio.sleep(0.1)
@@ -76,9 +76,9 @@ class TestTaskManager:
     async def test_task_manager_cancel_task(self):
         """Test cancelling a task."""
         manager = TaskManager()
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         params = TaskManagerParams(loop=loop)
-        manager.setup(params)
+        await manager.setup(params)
 
         async def long_task():
             await asyncio.sleep(10)
