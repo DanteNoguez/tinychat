@@ -1,0 +1,283 @@
+---
+globs: tinychat/**
+alwaysApply: false
+---
+# Rules for contributing to tinychat
+
+## About
+
+tinychat is a framework for building conversational AI systems. It provides three fundamental abstractions that allow engineers to conceptualize complex conversational flows as simple, independent units that communicate through message passing.
+
+1. **Message** - Information quanta (the bits)
+2. **MessageProcessor** - Information transformations (the channels)
+3. **CompositeProcessor** - Information topology (the graph)
+
+Everything else is derived. Databases, APIs, LLMs, CRMs are all processors, while conversations and agents are composite processors.
+
+## Core Principles
+
+### Simplicity > Verbosity > Complexity
+
+The framework provides **minimal, essential building blocks**. We do not:
+- Assume user needs (no caching, rate limiting, retry logic in core)
+- Optimize prematurely (correctness before performance)
+- Add convenience features that can be built by users
+
+We do:
+- Provide simple, composable primitives
+- Ensure the API makes complex topologies possible
+- Design for maximum flexibility and efficiency
+
+### Information Theory Foundations
+
+**Messages are quanta:**
+- Immutable value objects (message structure is frozen; but AIMessage.tool_calls uses mutable containers for updates)
+- Lightweight (prefer bounded structures; AIMessage.tool_calls is an acknowledged exception for LLM API compatibility)
+- Typed explicitly (no generic dictionaries)
+- Self-identifying (id, timestamp)
+
+**Processors are channels:**
+- Stateful transformations: `Message → Optional[Message]` (AsyncIterable support planned for future)
+- Can fail (noisy channels)
+- Have capacity constraints (async, but bounded)
+- Stateful internally (processors maintain their own state)
+
+**Composition is topology:**
+- CompositeProcessor = type-based iterative routing graph
+- Message types → handlers: 1:1 (each type has exactly one handler)
+- Handlers → message types: 1:N (each handler can produce multiple types)
+- This creates sequential execution within a chain, state-dependent paths, non-linear topology
+- Automatic chaining: results re-routed through handlers until terminal
+- Bounded by `max_hops` and `EgressMessage` terminal condition
+- `IngressMessage` and `EgressMessage` are semantic markers for system boundaries (not enforced)
+- CompositeProcessor is itself a MessageProcessor (recursive composition)
+
+### Sequential Execution, State-Dependent Paths, Non-Linear Topology
+
+Within a single message chain, processing is **sequential**: one message transformation at a time. However, multiple independent message chains can be processed **concurrently**. Paths are **state-dependent**: processors choose which message type to produce based on internal state/logic. Topology is **non-linear**: the graph structure supports cycles, branches, and complex routing.
+
+Since handlers can produce different message types based on state (1:N), this creates state machine topologies:
+
+- **Pipeline**: A → B → C → D (linear chain, each processor produces one type)
+- **Conditional/Branching**: A → E → {B or C} → ... (E produces B or C based on logic)
+- **Cycle**: A → B → C → A (bounded by `max_hops`)
+- **State Machine**: A → E → B → A → C → E → C (E can produce different types on successive calls)
+- **Nested**: A → [B → C → D] → E (recursive composition)
+
+Each handler processes one message, produces one result of some type, and the composite routes that result to the handler for that type. This continues until EgressMessage or None is produced, or max_hops is reached.
+
+### Asynchronous by Default
+
+Everything is async. Concurrency is fundamental to I/O-bound conversational systems. Sync wrappers can be built by users.
+
+### Lifecycle Management
+
+Processors require setup before use:
+
+```python
+config = SetupConfig(
+    task_manager_params=TaskManagerParams(loop=asyncio.get_running_loop()),
+    observers=[MyObserver()],
+)
+await processor.setup(config)
+```
+
+**Key points:**
+- `setup()` must be called before `process()`
+- `SetupConfig` provides shared `TaskManager` and observers
+- In recursive composition, parent CompositeProcessor shares TaskManager with child processors
+- `cleanup()` available for resource management
+- Processors can be interrupted via `interrupt_processing()` on CompositeProcessor
+
+### Topology Validation
+
+Processors can declare output types for topology validation:
+
+```python
+enricher = EnricherProcessor(output_types={EnrichedData})
+analyzer = AnalyzerProcessor(output_types={ProcessedResult})
+formatter = FormatterProcessor(output_types={EgressMessage})
+```
+
+**Key points:**
+- `output_types` is optional - processors without it skip validation
+- `CompositeProcessor` validates at construction that all declared output types have handlers
+- Terminal types (`None`, `EgressMessage`) are excluded from validation but shown in topology
+- Validation helps catch topology errors early for complex graphs
+- Use `composite.get_topology()` to visualize the graph structure
+
+## Code Requirements
+
+- Type everything
+- No docstrings unless critical. Code is self-documenting through:
+    - Clear names (`process_user_input` not `process`)
+    - Type annotations (`Message → Optional[Message]`)
+    - Small functions (one responsibility)
+
+    - Only document:
+        1. Non-obvious design decisions
+        2. Critical contracts and invariants
+        3. Complex algorithms that aren't self-evident
+
+- Prefer immutability. Messages are immutable values. Processors have internal state.
+- Messages are values. Processors have state. Don't mix.
+- Error handling is up to the user. Raise exceptions or return error messages as needed.
+
+### Observers for Instrumentation
+
+State tracking, metrics, logging, debugging - all observer concerns:
+
+```python
+# Good - separate concerns
+class MyProcessor(MessageProcessor):
+    async def _process(self, message: Message) -> Optional[Message]:
+        return self._transform(message)  # Clean logic
+
+class MetricsObserver(Observer):
+    async def on_message_processed(self, data: MessageProcessed):
+        self.record_latency(data.time)  # Separate instrumentation
+
+# Bad - mixing concerns
+class MyProcessor(MessageProcessor):
+    async def _process(self, message: Message) -> Optional[Message]:
+        start = time.monotonic_ns()  # Instrumentation in core logic
+        result = self._transform(message)
+        self.metrics.record(time.monotonic_ns() - start)
+        return result
+```
+
+**Observer notification model:**
+- Notifications are fire-and-forget (async tasks, not awaited)
+- Observer exceptions are logged but don't propagate to processors, so processing remains unaffected
+- No guarantee when observer tasks complete relative to message processing
+
+### Composition Over Inheritance
+
+```python
+# Good - inject dependencies
+class LLMProcessor(MessageProcessor):
+    def __init__(self, llm_client: LLMClient):
+        self._llm = llm_client
+
+# Bad - deep hierarchies
+class BaseLLMProcessor(MessageProcessor):
+    pass
+
+class OpenAIProcessor(BaseLLMProcessor):
+    pass
+
+class GPT4Processor(OpenAIProcessor):
+    pass
+```
+
+## Architecture Patterns
+
+### Type-Based Routing
+
+CompositeProcessor routes messages through a topology of handlers based on message types:
+
+```python
+# Define processors for each stage with output types for validation
+crm = CRMProcessor(output_types={CRMMessage})
+db = DBProcessor(output_types={EnrichedMessage})
+llm = LLMProcessor(output_types={ReplyMessage})
+formatter = FormatterProcessor(output_types={EgressMessage})
+
+# Build routing topology via type-based handlers
+chatbot = CompositeProcessor(
+    handlers={
+        IngressMessage: crm,      # Entry point
+        CRMMessage: db,           # CRM → DB
+        EnrichedMessage: llm,     # DB → LLM
+        ReplyMessage: formatter,  # LLM → Format
+        # Formatter produces EgressMessage (terminal)
+    },
+    max_hops=10,
+)
+
+# Process returns when EgressMessage is produced
+result = await chatbot.process(user_message)
+```
+
+### State Machine Routing (1:N)
+
+Processors can produce different message types based on internal logic:
+
+```python
+class RouterProcessor(MessageProcessor):
+    async def _process(self, message: InputMessage) -> Message:
+        if message.needs_approval:
+            return ApprovalMessage(content=message.content)
+        elif message.is_urgent:
+            return UrgentMessage(content=message.content)
+        else:
+            return StandardMessage(content=message.content)
+
+# Declare all possible output types for validation
+router = RouterProcessor(
+    output_types={ApprovalMessage, UrgentMessage, StandardMessage}
+)
+approver = ApproverProcessor(output_types={EgressMessage})
+escalator = EscalatorProcessor(output_types={EgressMessage})
+handler = HandlerProcessor(output_types={EgressMessage})
+
+# Same processor routes to different handlers
+workflow = CompositeProcessor(
+    handlers={
+        InputMessage: router,          # 1 input type, 3 possible outputs
+        ApprovalMessage: approver,
+        UrgentMessage: escalator,
+        StandardMessage: handler,
+    },
+    max_hops=10,
+)
+```
+
+### Recursive Composition
+
+CompositeProcessors can contain other CompositeProcessors:
+
+```python
+# Inner agent graph
+agent_graph = CompositeProcessor(
+    handlers={
+        TaskMessage: planner,
+        PlanMessage: executor,
+        ResultMessage: validator,
+    },
+    max_hops=5,
+)
+
+# Outer workflow graph that includes agent
+workflow = CompositeProcessor(
+    handlers={
+        IngressMessage: preprocessor,
+        TaskMessage: agent_graph,  # Nested composite
+        AgentOutput: postprocessor,
+    },
+    max_hops=10,
+)
+```
+
+## Testing
+
+- Test behavior, not implementation
+- Use realistic message flows
+- Test error paths explicitly
+- Mock external I/O (LLMs, DBs, APIs)
+
+## What NOT to Add to Core
+
+These are user concerns, not framework concerns:
+- Caching/memoization
+- Rate limiting
+- Retry logic with backoff
+- Circuit breakers
+- Idempotency keys
+- Authentication/authorization
+- Persistence/checkpointing (use observers)
+- Metrics/monitoring (use observers)
+- Logging formats (use observers)
+
+The framework provides the primitives. Users implement policies.
+
