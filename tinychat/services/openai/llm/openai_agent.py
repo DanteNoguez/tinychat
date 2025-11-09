@@ -19,8 +19,9 @@ class OpenAIAgent:
         self.tools = config.tools
         self.tools_schema = self.create_tools_schema(self.tools) if self.tools else None
         self.config = config
-        self.tools_by_name = {tool.name: tool for tool in self.tools}
-        self.recursion_count = 0
+        self.tools_by_name = (
+            {tool.name: tool for tool in self.tools} if self.tools else None
+        )
 
     def generate_prompt(self, prompt: SystemMessage) -> list[dict]:
         return [{"role": "system", "content": prompt.content}]
@@ -34,8 +35,8 @@ class OpenAIAgent:
                     "type": param.data_type,
                     "description": param.description,
                 }
-                if tool.enum:
-                    properties[param.name]["enum"] = tool.enum
+                if param.enum:
+                    properties[param.name]["enum"] = param.enum
             output.append(
                 {
                     "type": "function",
@@ -52,73 +53,88 @@ class OpenAIAgent:
             )
         return output
 
-    async def generate_response_async(self, messages: list[dict]) -> Response:
-        self.recursion_count += 1
-        if self.recursion_count > self.config.recursion_limit:
-            raise ValueError(
-                f"Recursion limit of {self.config.recursion_limit} reached."
-            )
-
-        try:
-            logger.debug(f"Messages so far: {messages}")
-            response = await self.client.responses.create(
-                model=self.model_name,
-                temperature=self.config.temperature,
-                max_tokens=self.config.max_tokens,
-                messages=self.prompt + messages,
-                tools=self.tools_schema,
-                tool_choice="auto" if self.config.tools else None,
-            )
-            logger.debug(f"Response: {response}")
-            return response
-        except Exception:
-            logger.exception(f"Error in OpenAI's generate_response_async: {messages}")
-            raise
-
-    async def handle_function_call(
+    async def execute_function_calls(
         self, messages: list[dict], response: Response
-    ) -> list[dict]:
-        messages.append(response)
-        self.recursion_count += 1
-        if self.recursion_count > self.config.recursion_limit:
-            raise ValueError(
-                f"Recursion limit of {self.config.recursion_limit} reached."
-            )
-
-        function_call = response.output[0]
-        function_name = function_call.name
-        function_arguments = json.loads(function_call.arguments)
-        if tool := self.tools_by_name.get(function_name):
-            result = await tool.run(**function_arguments)
-            messages.append(
-                {
-                    "role": "tool",
-                    "content": str(result),
-                    "tool_call_id": function_call.call_id,
-                }
-            )
-            new_response = await self.generate_response_async(messages)
-            if new_response.output[0].type == "function_call":
-                messages = await self.handle_function_call(messages, new_response)
-            else:
+    ) -> None:
+        for item in response.output:
+            if item.type == "function_call":
+                # Add formatted function call to history
                 messages.append(
-                    {"role": "assistant", "content": new_response.output_text}
+                    {
+                        "id": item.id,
+                        "call_id": item.call_id,
+                        "type": "function_call",
+                        "name": item.name,
+                        "arguments": item.arguments,
+                    }
                 )
-            logger.debug(f"Messages after function call: {messages}")
-            return messages
 
-        raise ValueError(
-            f"Tool with name {function_call.name} not found."
-        )  # TODO: handle this with a retry
+                # Execute the function and add output to history
+                function_name = item.name
+                function_arguments = json.loads(item.arguments)
+                if tool := self.tools_by_name.get(function_name):
+                    result = await tool.run(**function_arguments)
+                    messages.append(
+                        {
+                            "type": "function_call_output",
+                            "call_id": item.call_id,
+                            "output": json.dumps({"result": str(result)}),
+                        }
+                    )
+                else:
+                    raise ValueError(
+                        f"[OpenAIAgent] Tool with name {function_name} not found."
+                    )
 
-    async def handle_generate_response(self, messages: list[dict]) -> str:
-        try:
-            response = await self.generate_response_async(messages)
-            logger.debug(f"Generated response: {response}")
-            if response.output[0].type == "function_call":
-                return await self.handle_function_call(messages, response)
-            self.recursion_count = 0
-            return response.output_text
-        except Exception as e:
-            logger.exception(f"Error in handle generate response: {e}", exc_info=True)
-            raise e
+    async def generate_response_async(
+        self, messages: list[dict], depth: int = 0
+    ) -> None:
+        if depth > self.config.recursion_limit:
+            raise RuntimeError(
+                f"[OpenAIAgent] Recursion limit of {self.config.recursion_limit} reached."
+            )
+
+        logger.trace(f"[OpenAIAgent] Input chat history: {messages}")
+        response = await self.client.responses.create(
+            model=self.model_name,
+            temperature=self.config.temperature,
+            max_output_tokens=self.config.max_tokens,
+            tools=self.tools_schema,
+            tool_choice="auto" if self.config.tools else None,
+            input=messages,
+        )
+        logger.trace(f"[OpenAIAgent] Generated response: {response}")
+
+        if response.output[0].type == "function_call":
+            await self.execute_function_calls(messages, response)
+            return await self.generate_response_async(messages, depth + 1)
+
+        # Format and add assistant message to history
+        for output_item in response.output:
+            if output_item.type == "message":
+                content = ""  # TODO: raise an error if there's no content
+                for content_item in output_item.content:
+                    if content_item.type == "output_text":
+                        content += content_item.text
+                messages.append(
+                    {
+                        "role": "assistant",
+                        "content": content,
+                    }
+                )
+
+    async def reply(self, messages: list[dict]) -> str:
+        """
+        Returns a string with the assistant's response only.
+        """
+        messages = self.prompt + messages
+        await self.generate_response_async(messages, depth=0)
+        return messages[-1]["content"]
+
+    async def reply_with_history(self, messages: list[dict]) -> list[dict]:
+        """
+        Returns a list of all messages in the conversation history, including input, prompt, tool calls and assistant responses.
+        """
+        messages = self.prompt + messages
+        await self.generate_response_async(messages, depth=0)
+        return messages

@@ -1,7 +1,8 @@
 import os
+from abc import ABC, abstractmethod
 from dotenv import load_dotenv
 
-from typing import Optional
+from typing import Optional, Literal, Any
 from dataclasses import dataclass
 
 from tinychat.messages.messages import SystemMessage
@@ -10,22 +11,30 @@ from tinychat.messages.messages import SystemMessage
 load_dotenv()
 
 
+DataType = Literal["string", "number", "integer", "boolean", "array", "object", "null"]
+
+
 @dataclass
 class ToolParameter:
     name: str
     description: str
-    data_type: str
+    data_type: DataType
+    enum: Optional[list[str]] = None
 
 
 @dataclass
-class Tool:
+class Tool(ABC):
     name: str
     description: str
     parameters: list[ToolParameter]
-    enum: Optional[list[str]] = None
 
-    async def run(self, *args, **kwargs):
-        raise NotImplementedError
+    @abstractmethod
+    async def run(self, **kwargs) -> Any:
+        """
+        This method will be called by the agent to execute tool calls.
+        Subclasses must implement it.
+        """
+        ...
 
 
 @dataclass
