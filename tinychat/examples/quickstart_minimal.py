@@ -1,12 +1,13 @@
 import asyncio
+
 from typing import Optional
+from loguru import logger
 
 from tinychat.messages.messages import (
     IngressMessage,
     EgressMessage,
     Message,
 )
-from loguru import logger
 from tinychat.asynchronous.manager import TaskManagerParams
 from tinychat.processors.message_processor import MessageProcessor, SetupConfig
 from tinychat.processors.composite import CompositeProcessor
