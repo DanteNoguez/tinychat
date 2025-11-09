@@ -106,7 +106,10 @@ class MessageBus(MessageProcessor):
             depth += 1
 
         raise MaxHopsExceededError(
-            f"Maximum routing depth {self._max_depth} exceeded at message {message.name}"
+            source_message=message,
+            source_processor=self,
+            max_hops=self._max_depth,
+            current_hops=depth,
         )
 
     async def interrupt_processing(self):

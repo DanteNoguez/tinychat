@@ -16,7 +16,6 @@ from tinychat.asynchronous.manager import (
     TaskManagerParams,
 )
 from tinychat.utils.utils import random_id
-from tinychat.processors.exceptions import ProcessorException
 
 
 @dataclass
@@ -136,13 +135,8 @@ class MessageProcessor:
             return result
 
         except Exception as e:
-            processor_exception = ProcessorException(
-                source_message=message, source_processor=self, details=str(e)
-            )
-            self.create_task(
-                self._notify_error(message, processor_exception), name="notify_error"
-            )
-            raise processor_exception
+            self.create_task(self._notify_error(message, e), name="notify_error")
+            raise
 
     @abstractmethod
     async def _process(self, message: Message) -> Optional[Message]:

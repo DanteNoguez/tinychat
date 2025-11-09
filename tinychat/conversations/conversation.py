@@ -38,29 +38,26 @@ class Conversation(MessageBus):
 
     async def _process(self, message: Message) -> Optional[Message]:
         match self.conversation_state:
-            case ProcessingState.PAUSED:
-                await self._state_manager.wait_if_paused()
+            case ProcessingState.STOPPED:
+                logger.warning(f"Conversation {self} is stopped.")
+                await self.wait_if_stopped()
             case ProcessingState.ERROR:
                 logger.warning(f"Conversation {self} is in error state.")
                 await self.handle_errored_conversation()
                 return None
-            case ProcessingState.STOPPED:
-                logger.warning(f"Conversation {self} is stopped.")
-                await self.handle_stopped_conversation()
+            case ProcessingState.COMPLETED:
+                logger.info(f"Conversation {self} is completed.")
                 return None
 
         try:
-            result = await super()._process(message)
-            return result
-        except Exception as e:
-            logger.exception(f"Unexpected error in {self}: {e}")
+            return await super()._process(message)
+        except Exception:
+            self._state_manager.set_error()
             raise
-        finally:
-            await self._state_manager.set_error()
 
-    async def pause_conversation(self):
+    async def complete_conversation(self):
         await self.interrupt_processing()
-        self._state_manager.pause()
+        self._state_manager.complete()
 
     async def resume_conversation(self):
         self._state_manager.resume()
@@ -69,8 +66,8 @@ class Conversation(MessageBus):
         await self.interrupt_processing()
         self._state_manager.stop()
 
-    @abstractmethod
-    async def handle_errored_conversation(self): ...
+    async def wait_if_stopped(self):
+        await self._state_manager.wait_if_stopped()
 
     @abstractmethod
-    async def handle_stopped_conversation(self): ...
+    async def handle_errored_conversation(self): ...
