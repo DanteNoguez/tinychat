@@ -4,7 +4,7 @@ alwaysApply: false
 ---
 # Rules for contributing to tinychat
 
-## Vision
+## About
 
 tinychat is a framework for building conversational AI systems. It provides three fundamental abstractions that allow engineers to conceptualize complex conversational flows as simple, independent units that communicate through message passing.
 
@@ -28,33 +28,66 @@ We do:
 - Ensure the API makes complex topologies possible
 - Design for maximum flexibility and efficiency
 
-### Information Theory Foundation
+### Information Theory Foundations
 
 **Messages are quanta:**
-- Immutable value objects
-- Lightweight (no unbounded collections, no metadata bags)
+- Immutable value objects (message structure is frozen; but AIMessage.tool_calls uses mutable containers for updates)
+- Lightweight (prefer bounded structures; AIMessage.tool_calls is an acknowledged exception for LLM API compatibility)
 - Typed explicitly (no generic dictionaries)
 - Self-identifying (id, timestamp)
 
 **Processors are channels:**
-- Pure transformations: `Message → Optional[Message] | AsyncIterable[Message]`
+- Stateful transformations: `Message → Optional[Message]` (AsyncIterable support planned for future)
 - Can fail (noisy channels)
 - Have capacity constraints (async, but bounded)
-- Stateful internally, but Markovian externally
+- Stateful internally (processors maintain their own state)
 
 **Composition is topology:**
-- CompositeProcessor = complete graph of processors
-- Processors can call each other directly (injected references)
-- Cycles allowed but bounded (max_hops)
-- Sources (IngressMessage) and sinks (EgressMessage) define boundaries
+- CompositeProcessor = type-based iterative routing graph
+- Message types → handlers: 1:1 (each type has exactly one handler)
+- Handlers → message types: 1:N (each handler can produce multiple types)
+- This creates sequential execution within a chain, state-dependent paths, non-linear topology
+- Automatic chaining: results re-routed through handlers until terminal
+- Bounded by `max_hops` and `EgressMessage` terminal condition
+- `IngressMessage` and `EgressMessage` are semantic markers for system boundaries (not enforced)
+- CompositeProcessor is itself a MessageProcessor (recursive composition)
 
-### Markovian Property
+### Sequential Execution, State-Dependent Paths, Non-Linear Topology
 
-Current message + processor state = sufficient information. No hidden state in messages. The future depends only on the present, not the path that led there.
+Within a single message chain, processing is **sequential**: one message transformation at a time. However, multiple independent message chains can be processed **concurrently**. Paths are **state-dependent**: processors choose which message type to produce based on internal state/logic. Topology is **non-linear**: the graph structure supports cycles, branches, and complex routing.
+
+Since handlers can produce different message types based on state (1:N), this creates state machine topologies:
+
+- **Pipeline**: A → B → C → D (linear chain, each processor produces one type)
+- **Conditional/Branching**: A → E → {B or C} → ... (E produces B or C based on logic)
+- **Cycle**: A → B → C → A (bounded by `max_hops`)
+- **State Machine**: A → E → B → A → C → E → C (E can produce different types on successive calls)
+- **Nested**: A → [B → C → D] → E (recursive composition)
+
+Each handler processes one message, produces one result of some type, and the composite routes that result to the handler for that type. This continues until EgressMessage or None is produced, or max_hops is reached.
 
 ### Asynchronous by Default
 
 Everything is async. Concurrency is fundamental to I/O-bound conversational systems. Sync wrappers can be built by users.
+
+### Lifecycle Management
+
+Processors require setup before use:
+
+```python
+config = SetupConfig(
+    task_manager_params=TaskManagerParams(loop=asyncio.get_running_loop()),
+    observers=[MyObserver()],
+)
+await processor.setup(config)
+```
+
+**Key points:**
+- `setup()` must be called before `process()`
+- `SetupConfig` provides shared `TaskManager` and observers
+- In recursive composition, parent CompositeProcessor shares TaskManager with child processors
+- `cleanup()` available for resource management
+- Processors can be interrupted via `interrupt_processing()` on CompositeProcessor
 
 ## Code Requirements
 
@@ -69,9 +102,9 @@ Everything is async. Concurrency is fundamental to I/O-bound conversational syst
         2. Critical contracts and invariants
         3. Complex algorithms that aren't self-evident
 
-- Prefer immutability, avoid mutable state in messages and processors.
+- Prefer immutability. Messages are immutable values. Processors have internal state.
 - Messages are values. Processors have state. Don't mix.
-- Handle errors as data. Errors are just low-probability outputs.
+- Error handling is up to the user. Raise exceptions or return error messages as needed.
 
 ### Observers for Instrumentation
 
@@ -96,6 +129,11 @@ class MyProcessor(MessageProcessor):
         return result
 ```
 
+**Observer notification model:**
+- Notifications are fire-and-forget (async tasks, not awaited)
+- Observer exceptions are logged but don't propagate to processors, so processing remains unaffected
+- No guarantee when observer tasks complete relative to message processing
+
 ### Composition Over Inheritance
 
 ```python
@@ -115,72 +153,84 @@ class GPT4Processor(OpenAIProcessor):
     pass
 ```
 
-**Complete graph example (DB → CRM → AI):**
-```python
-class DBProcessor(MessageProcessor):
-    async def _process(self, message: UserMessage) -> Optional[Message]:
-        history = await self._db.get_history(message.conversation_id)
-        enriched = ContextMessage(
-            content=message.content,
-            conversation_id=message.conversation_id,
-            history=history
-        )
-        return await self.composite.route(ProcessorType.CRM, enriched)  # Call next processor
-
-class CRMProcessor(MessageProcessor):
-    async def _process(self, message: ContextMessage) -> Optional[Message]:
-        user_data = await self._crm.get_user_data(message.user_id)
-        enriched = ContextMessage(
-            content=message.content,
-            conversation_id=message.conversation_id,
-            history=message.history,
-            user_data=user_data
-        )
-        return await self.composite.route(ProcessorType.AI, enriched)  # Call next processor
-
-class AIProcessor(MessageProcessor):
-    async def _process(self, message: ContextMessage) -> Optional[Message]:
-        response = await self._llm.generate(message)
-        return AIMessage(content=response, ...)
-
-# CompositeProcessor wires them together
-class Conversation(CompositeProcessor):
-    def __init__(self):
-        super().__init__(processors=[DBProcessor(), CRMProcessor(), AIProcessor()])
-        # CompositeProcessor auto-injects: the composite reference into each processor
-```
-
-### Explicit Over Implicit
-
-```python
-# Good - clear intent
-result = await self.composite.route(ProcessorType.ANALYZER, message)
-result = await self.composite.route(ProcessorType.LLM, result)
-return EgressMessage(content=result.content)
-
-# Bad - magic routing
-@route_to("analyzer", then="llm", egress=True)  # Too clever
-async def _process(self, message):
-    pass
-```
-
 ## Architecture Patterns
 
-### Boundary Management
+### Type-Based Routing
 
-CompositeProcessor handles ingress/egress:
+CompositeProcessor routes messages through a topology of handlers based on message types:
 
 ```python
-class Chatbot(CompositeProcessor):
-    async def handle(self, user_input: str, **context) -> str:
-        # Boundary: external → internal
-        ingress = IngressMessage(content=user_input, **context)
-        
-        # Internal processing
-        result = await self.process(ingress)
-        
-        # Boundary: internal → external
-        return self._ensure_egress(result).content
+# Define processors for each stage
+crm = CRMProcessor()
+db = DBProcessor()
+llm = LLMProcessor()
+
+# Build routing topology via type-based handlers
+chatbot = CompositeProcessor(
+    handlers={
+        IngressMessage: crm,      # Entry point
+        CRMMessage: db,           # CRM → DB
+        EnrichedMessage: llm,     # DB → LLM
+        ReplyMessage: formatter,  # LLM → Format
+        # Formatter produces EgressMessage (terminal)
+    },
+    max_hops=10,
+)
+
+# Process returns when EgressMessage is produced
+result = await chatbot.process(user_message)
+```
+
+### State Machine Routing (1:N)
+
+Processors can produce different message types based on internal logic:
+
+```python
+class RouterProcessor(MessageProcessor):
+    async def _process(self, message: InputMessage) -> Message:
+        if message.needs_approval:
+            return ApprovalMessage(content=message.content)
+        elif message.is_urgent:
+            return UrgentMessage(content=message.content)
+        else:
+            return StandardMessage(content=message.content)
+
+# Same processor routes to different handlers
+workflow = CompositeProcessor(
+    handlers={
+        InputMessage: router,          # 1 input type
+        ApprovalMessage: approver,     # 3 possible outputs
+        UrgentMessage: escalator,
+        StandardMessage: handler,
+    },
+    max_hops=10,
+)
+```
+
+### Recursive Composition
+
+CompositeProcessors can contain other CompositeProcessors:
+
+```python
+# Inner agent graph
+agent_graph = CompositeProcessor(
+    handlers={
+        TaskMessage: planner,
+        PlanMessage: executor,
+        ResultMessage: validator,
+    },
+    max_hops=5,
+)
+
+# Outer workflow graph that includes agent
+workflow = CompositeProcessor(
+    handlers={
+        IngressMessage: preprocessor,
+        TaskMessage: agent_graph,  # Nested composite
+        AgentOutput: postprocessor,
+    },
+    max_hops=10,
+)
 ```
 
 ## Testing

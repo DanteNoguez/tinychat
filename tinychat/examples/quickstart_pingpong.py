@@ -10,7 +10,7 @@ from tinychat.messages.messages import (
 )
 from tinychat.asynchronous.manager import TaskManagerParams
 from tinychat.processors.message_processor import MessageProcessor, SetupConfig
-from tinychat.processors.message_bus import MessageBus
+from tinychat.processors.composite import CompositeProcessor
 from tinychat.observers.observer import (
     BaseObserver,
     MessageReceived,
@@ -18,13 +18,13 @@ from tinychat.observers.observer import (
 )
 
 
-@dataclass
+@dataclass(frozen=True)
 class BotMessage(Message):
     content: str
     iteration: int
 
 
-@dataclass
+@dataclass(frozen=True)
 class UserMessage(Message):
     content: str
     iteration: int
@@ -89,7 +89,7 @@ async def main():
     user = UserProcessor(name="user")
 
     # Setup message bus with type-based routing
-    bus = MessageBus(
+    bus = CompositeProcessor(
         handlers={
             IngressMessage: bot,
             BotMessage: user,

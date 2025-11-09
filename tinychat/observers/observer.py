@@ -8,13 +8,13 @@ if TYPE_CHECKING:
     from tinychat.processors.message_processor import MessageProcessor
 
 
-@dataclass
+@dataclass(frozen=True)
 class MessageReceived(Message):
     source_processor: "MessageProcessor"
     source_message: Message
 
 
-@dataclass
+@dataclass(frozen=True)
 class MessageProcessed(Message):
     source_processor: "MessageProcessor"
     source_message: Message

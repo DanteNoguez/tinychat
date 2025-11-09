@@ -9,7 +9,7 @@ from tinychat.messages.messages import (
 from loguru import logger
 from tinychat.asynchronous.manager import TaskManagerParams
 from tinychat.processors.message_processor import MessageProcessor, SetupConfig
-from tinychat.processors.message_bus import MessageBus
+from tinychat.processors.composite import CompositeProcessor
 from tinychat.observers.observer import BaseObserver, MessageReceived, MessageProcessed
 
 from tinychat.utils.logging import configure_pretty_logging
@@ -69,7 +69,7 @@ async def main():
     transformer = TransformerProcessor(name="transformer")
 
     # Setup message bus with type-based routing
-    bus = MessageBus(
+    bus = CompositeProcessor(
         handlers={
             IngressMessage: echo,
             EchoMessage: transformer,

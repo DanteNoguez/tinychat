@@ -4,23 +4,23 @@ from typing import Optional
 from loguru import logger
 
 from tinychat.messages.messages import Message
-from tinychat.processors.message_bus import MessageBus
+from tinychat.processors.composite import CompositeProcessor
 from tinychat.state.manager import StateManager, ProcessingState
 from tinychat.processors.message_processor import MessageProcessor
 
 
-class Conversation(MessageBus):
+class Conversation(CompositeProcessor):
     def __init__(
         self,
         *,
         conversation_id: str,
         handlers: dict[type[Message], MessageProcessor],
         state_manager: Optional[StateManager] = None,
-        max_depth: int = 30,
+        max_hops: int = 30,
     ):
         super().__init__(
             handlers=handlers,
-            max_depth=max_depth,
+            max_hops=max_hops,
         )
         self._conversation_id = conversation_id
         self._state_manager = state_manager or StateManager()

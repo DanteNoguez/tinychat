@@ -10,7 +10,7 @@ from tinychat.messages.messages import (
 )
 from tinychat.asynchronous.manager import TaskManagerParams
 from tinychat.processors.message_processor import MessageProcessor, SetupConfig
-from tinychat.processors.message_bus import MessageBus
+from tinychat.processors.composite import CompositeProcessor
 from tinychat.observers.observer import (
     BaseObserver,
     MessageReceived,
@@ -18,7 +18,7 @@ from tinychat.observers.observer import (
 )
 
 
-@dataclass
+@dataclass(frozen=True)
 class CRMMessage(Message):
     content: dict
     user_id: str
@@ -26,7 +26,7 @@ class CRMMessage(Message):
     user_message: Message
 
 
-@dataclass
+@dataclass(frozen=True)
 class EnrichedMessage(Message):
     content: dict
     user_id: str
@@ -35,7 +35,7 @@ class EnrichedMessage(Message):
     user_message: Message
 
 
-@dataclass
+@dataclass(frozen=True)
 class ReplyRequestMessage(Message):
     content: str
     user_id: str
@@ -44,7 +44,7 @@ class ReplyRequestMessage(Message):
     user_message: Message
 
 
-@dataclass
+@dataclass(frozen=True)
 class ReplyMessage(Message):
     content: str
     user_message: Message
@@ -219,24 +219,24 @@ async def main():
 
     # Create inner message bus for agents with its own max_hops limit
     # Flow inside agent bus: EnrichedMessage → Orchestrator → ReplyRequest → ReplyAgent → Reply → Orchestrator → Egress
-    agent_bus = MessageBus(
+    agent_bus = CompositeProcessor(
         handlers={
             EnrichedMessage: orchestrator,
             ReplyRequestMessage: reply_agent,
             ReplyMessage: orchestrator,
         },
-        max_depth=10,  # Agents have their own hop limit
+        max_hops=10,  # Agents have their own hop limit
     )
 
     # Setup outer message bus with type-based routing
     # Flow: Ingress → CRM → DB → EnrichedMessage → [Agent Bus] → Egress
-    bus = MessageBus(
+    bus = CompositeProcessor(
         handlers={
             IngressMessage: crm,
             CRMMessage: db,
             EnrichedMessage: agent_bus,
         },
-        max_depth=5,  # Outer bus hop limit
+        max_hops=5,  # Outer bus hop limit
     )
     await bus.setup(config)
 
