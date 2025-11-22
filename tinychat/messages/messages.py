@@ -3,7 +3,6 @@ from typing import Any, Dict, List, Optional
 from dataclasses import dataclass, field
 
 from tinychat.utils.utils import random_id
-from tinychat.messages.models import LLMServiceType
 
 
 @dataclass(frozen=True)
@@ -27,19 +26,19 @@ class IngressMessage(Message):
 
 @dataclass(frozen=True)
 class EgressMessage(Message):
-    conversation_id: Optional[str] = None
     user_id: Optional[str] = None
+    conversation_id: Optional[str] = None
 
 
 @dataclass(frozen=True)
 class LLMMessage(Message):
-    service: LLMServiceType
-    conversation_id: str
+    role: str
 
-
-@dataclass(frozen=True)
-class UserMessage(LLMMessage):
-    user_id: Optional[str] = None
+    def to_openai_message(self) -> dict:
+        return {
+            "role": self.role,
+            "content": self.content,
+        }
 
 
 @dataclass(frozen=True)
@@ -50,14 +49,9 @@ class AIMessage(LLMMessage):
     The message structure itself remains immutable (frozen).
     """
 
-    agent_id: str
+    role: str = "assistant"
     tool_calls: Optional[List[Dict[str, Any]]] = None
     reasoning: Optional[str] = None
-
-
-@dataclass(frozen=True)
-class SystemMessage(LLMMessage):
-    pass
 
 
 @dataclass(frozen=True)

@@ -5,6 +5,7 @@ from typing import Coroutine, List, Optional
 
 from loguru import logger
 
+from tinychat.utils.base_object import BaseObject
 from tinychat.messages.messages import Message
 from tinychat.observers.observer import (
     BaseObserver,
@@ -15,7 +16,6 @@ from tinychat.asynchronous.manager import (
     TaskManager,
     TaskManagerParams,
 )
-from tinychat.utils.utils import random_id
 
 
 @dataclass
@@ -25,7 +25,7 @@ class SetupConfig:
     observers: List[BaseObserver] = field(default_factory=list)
 
 
-class MessageProcessor:
+class MessageProcessor(BaseObject):
     """
     Base class for standalone message processors.
 
@@ -42,26 +42,17 @@ class MessageProcessor:
     def __init__(
         self,
         *,
-        name: Optional[str] = None,
         task_manager: Optional[TaskManager] = None,
         observers: Optional[List[BaseObserver]] = None,
         output_types: Optional[set[type[Message]]] = None,
+        **kwargs,
     ):
-        self._id = random_id()
-        self._name = name or f"{self.__class__.__name__}_{self._id}"
+        super().__init__(**kwargs)
         self._task_manager = task_manager
         self._observers = observers or []
         self._output_types = output_types
         self._started = False
         self._owns_task_manager = False
-
-    @property
-    def id(self) -> str:
-        return self._id
-
-    @property
-    def name(self) -> str:
-        return self._name
 
     @property
     def task_manager(self) -> TaskManager:
@@ -76,12 +67,6 @@ class MessageProcessor:
     @property
     def output_types(self) -> Optional[set[type[Message]]]:
         return self._output_types
-
-    def __str__(self) -> str:
-        return self._name
-
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}(name={self._name})"
 
     async def setup(self, config: SetupConfig):
         """

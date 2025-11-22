@@ -1,15 +1,10 @@
 import asyncio
-from typing import Optional
-from dataclasses import dataclass
 from loguru import logger
 
 from tinychat.messages.messages import (
     IngressMessage,
     EgressMessage,
-    Message,
-    SystemMessage,
 )
-from tinychat.messages.models import LLMServiceType
 from tinychat.asynchronous.manager import TaskManagerParams
 from tinychat.processors.message_processor import MessageProcessor, SetupConfig
 from tinychat.processors.composite import CompositeProcessor
@@ -17,10 +12,16 @@ from tinychat.observers.observer import (
     BaseObserver,
     MessageReceived,
     MessageProcessed,
+    Message,
 )
-from tinychat.services.openai.llm.openai_agent import OpenAIAgent
-from tinychat.services.openai.llm.models import OpenAIAgentConfig, Tool, ToolParameter
 
+from tinychat.services.llm.models import (
+    OpenAILLMConfig,
+    OpenAISystemMessage,
+    LLMMessage,
+)
+from tinychat.services.llm.tools import Tool
+from tinychat.services.llm.openai_llm import OpenAILLM
 from tinychat.utils.logging import configure_pretty_logging
 
 
@@ -31,9 +32,10 @@ configure_pretty_logging(debug_level=5)
 # In tinychat, tools are defined as classes that inherit from the Tool class.
 # The run method is called by the agent to execute tool calls.
 # The tool subclass can be of any arbitrary complexity.
-@dataclass
 class CalculatorTool(Tool):
-    precision: int = 2
+    def __init__(self, *, name: str, precision: int = 2):
+        super().__init__(name=name)
+        self.precision = precision
 
     def _validate_operation(self, operation: str) -> bool:
         return operation in ["add", "subtract", "multiply", "divide"]
@@ -53,6 +55,13 @@ class CalculatorTool(Tool):
         return f"{result:.{self.precision}f}"
 
     async def run(self, operation: str, a: float, b: float) -> str:
+        """
+        Perform basic arithmetic operations.
+
+        :param operation: The operation to perform. Must be one of: add, subtract, multiply, divide.
+        :param a: The first number.
+        :param b: The second number.
+        """
         if not self._validate_operation(operation):
             return "Error: Invalid operation. Valid operations are: add, subtract, multiply, divide."
 
@@ -78,58 +87,12 @@ class LoggingObserver(BaseObserver):
         )
 
 
-class LLMProcessor(MessageProcessor):
-    calculator_tool = CalculatorTool(
-        name="calculate",
-        description="Perform basic arithmetic operations",
-        parameters=[
-            ToolParameter(
-                name="operation",
-                description="The operation to perform",
-                data_type="string",
-                enum=["add", "subtract", "multiply", "divide"],
-            ),
-            ToolParameter(
-                name="a",
-                description="First number",
-                data_type="number",
-            ),
-            ToolParameter(
-                name="b",
-                description="Second number",
-                data_type="number",
-            ),
-        ],
-        precision=2,
-    )
+class EgressMessageProcessor(MessageProcessor):
+    def __init__(self, *, name: str):
+        super().__init__(name=name)
 
-    # Create agent with calculator tool
-    config = OpenAIAgentConfig(
-        prompt=SystemMessage(
-            service=LLMServiceType.OPENAI,
-            content="You are a helpful math assistant. Use the calculator tool to perform calculations.",
-            conversation_id="calculator-demo",
-        ),
-        model_name="gpt-4.1",
-        temperature=0.0,
-        max_tokens=300,
-        tools=[calculator_tool],
-    )
-
-    agent = OpenAIAgent(config)
-
-    async def _process(self, message: IngressMessage) -> Optional[EgressMessage]:
-        # Convert IngressMessage to OpenAI message format
-        messages = [{"role": "user", "content": message.content}]
-
-        # Generate response from agent
-        response = await self.agent.reply(messages)
-
-        # Return response as EgressMessage
-        return EgressMessage(
-            content=response,
-            conversation_id=message.conversation_id,
-        )
+    async def _process(self, message: Message) -> Message:
+        return EgressMessage(content=message.content)
 
 
 async def main():
@@ -140,12 +103,28 @@ async def main():
     )
 
     # Create LLM processor with output type declaration
-    llm = LLMProcessor(name="calculator_agent", output_types={EgressMessage})
+    llm = OpenAILLM(
+        llm_config=OpenAILLMConfig(
+            prompt=OpenAISystemMessage(
+                content="You're a helpful math assistant. Use the calculator tool to perform calculations.",
+            ),
+            model_name="gpt-4.1",
+            temperature=0.0,
+            max_tokens=300,
+            tools=[
+                CalculatorTool(
+                    name="calculate",
+                    precision=2,
+                )
+            ],
+        )
+    )
 
     # Setup composite processor with simple routing
     chatbot = CompositeProcessor(
         handlers={
             IngressMessage: llm,
+            LLMMessage: EgressMessageProcessor(name="egress_message_processor"),
         },
     )
     await chatbot.setup(config)
