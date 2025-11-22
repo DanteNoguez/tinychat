@@ -2,7 +2,6 @@ import inspect
 import re
 import types
 
-from enum import Enum
 from typing import (
     Any,
     Literal,
@@ -187,26 +186,6 @@ class Tool(BaseObject):
         if origin is Literal:
             return TypeSchema(data_type="string", enum=list(args))
 
-        # Handle Python Enums
-        # check if it's a class and subclass of Enum
-        if isinstance(py_type, type) and issubclass(py_type, Enum):
-            # Get all enum values
-            enum_values = [e.value for e in py_type]
-
-            # Determine type from the first value (assume homogeneous enums)
-            if enum_values:
-                first_val = enum_values[0]
-                if isinstance(first_val, int):
-                    data_type = "integer"
-                elif isinstance(first_val, float):
-                    data_type = "number"
-                else:
-                    data_type = "string"
-            else:
-                data_type = "string"
-
-            return TypeSchema(data_type=data_type, enum=enum_values)
-
         # Primitive mappings
         if origin is str:
             return TypeSchema(data_type="string")
@@ -236,7 +215,7 @@ class Tool(BaseObject):
         # Fallback for unknown types
         raise ValueError(
             f"Tool {self.name} uses unsupported type {py_type}. "
-            f"Supported types are: str, int, float, bool, list, set, tuple, dict, Literal, Enum."
+            f"Supported types are: str, int, float, bool, list, set, tuple, dict, Literal."
         )
 
     @abstractmethod
