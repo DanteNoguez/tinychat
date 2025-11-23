@@ -1,6 +1,7 @@
 import inspect
 import re
 import types
+import dataclasses
 
 from typing import (
     Any,
@@ -278,3 +279,59 @@ class Tool(BaseObject):
 
     @abstractmethod
     async def run(self, *args, **kwargs) -> Any: ...
+
+
+class GenerateTypedMessageTool(Tool):
+    """
+    A specialized Tool that represents a target Message type.
+    Used for structured output / routing.
+    """
+
+    def __init__(self, message_type: type):
+        self.message_type = message_type
+        # Use the class name as the tool name
+        super().__init__(name=message_type.__name__)
+        self.description = (
+            message_type.__doc__ or f"Emit a {message_type.__name__} message."
+        )
+        self.parameters = self._generate_message_parameters(message_type)
+
+    def _generate_message_parameters(self, message_type: type) -> list[ToolParameter]:
+        parameters = []
+        # Inspect dataclass fields
+        for field in dataclasses.fields(message_type):
+            # Skip internal fields that are not init-able (id, name, timestamp)
+            if not field.init:
+                continue
+
+            # Get type and description
+            field_type = field.type
+            # TODO: We can support field metadata for descriptions later if needed
+            description = f"Value for {field.name}"
+
+            schema = self._map_python_type(field_type)
+
+            is_required = (
+                field.default == dataclasses.MISSING
+                and field.default_factory == dataclasses.MISSING
+            )
+
+            parameters.append(
+                ToolParameter(
+                    name=field.name,
+                    description=description,
+                    schema=schema,
+                    required=is_required,
+                )
+            )
+        return parameters
+
+    async def run(self, **kwargs):
+        """
+        Emit a specific message type.
+
+        :param kwargs: The keyword arguments to instantiate the message.
+        """
+        # This won't actually be executed in the standard loop
+        # But if it were, it would just instantiate the message
+        return self.message_type(**kwargs)

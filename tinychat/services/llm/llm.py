@@ -4,8 +4,9 @@ from typing import Optional
 from loguru import logger
 
 from tinychat.processors.message_processor import MessageProcessor
-from tinychat.messages.messages import Message
+from tinychat.messages.messages import Message, EgressMessage
 from tinychat.services.llm.models import LLMConfig, LLMMessage
+from tinychat.services.llm.tools import GenerateTypedMessageTool
 
 
 class LLMService(MessageProcessor):
@@ -31,6 +32,20 @@ class LLMService(MessageProcessor):
 
         # Tools Setup
         self.tools = llm_config.tools or []
+
+        # Register Routing Tools from output_types
+        self.routing_tools = {}
+        if self.output_types:
+            for msg_type in self.output_types:
+                # Skip terminal/special types if necessary
+                if msg_type in (type(None), EgressMessage):
+                    continue
+
+                # Create a tool definition for this message type
+                msg_tool = GenerateTypedMessageTool(msg_type)
+                self.tools.append(msg_tool)
+                self.routing_tools[msg_tool.name] = msg_type
+
         self.tools_by_name = {tool.name: tool for tool in self.tools}
 
     # ==========================================================================
@@ -62,12 +77,12 @@ class LLMService(MessageProcessor):
     # MessageProcessor Implementation
     # ==========================================================================
 
-    async def _process(self, message: Message) -> LLMMessage:
+    async def _process(self, message: Message) -> Message:
         """
         Standard LLM processing flow:
-        1. Ingest: Convert incoming message to LLMMessage and append to history.
+        1. Ingest: Convert incoming message to Message and append to history.
         2. Generate: Call implementation-specific generation (handles tools/recursion).
-        3. Return: Return the final assistant response.
+        3. Return: Return the final Message.
         """
         # 1. Ingest
         llm_message = self._ensure_llm_message(message)
@@ -109,3 +124,17 @@ class LLMService(MessageProcessor):
     @abstractmethod
     def _ensure_llm_message(self, message: Message) -> LLMMessage:
         """Converts a generic Message to a provider-specific LLMMessage (User role)."""
+
+    def _get_routing_message(self, name: str, arguments: dict) -> Optional[Message]:
+        """
+        Checks if the tool name corresponds to a routing message.
+        If so, instantiates and returns the Message.
+        """
+        if message_type := self.routing_tools.get(name):
+            try:
+                return message_type(**arguments)
+            except Exception as e:
+                logger.warning(f"Failed to instantiate routing message {name}: {e}")
+                # Fallback: return None so the caller treats it as a normal tool failure
+                return None
+        return None

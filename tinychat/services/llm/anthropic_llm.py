@@ -1,4 +1,5 @@
 from typing import Optional
+from loguru import logger
 
 from anthropic import AsyncAnthropic
 from anthropic.types import (
@@ -63,6 +64,10 @@ class AnthropicLLM(LLMService):
         if self.instructions:
             kwargs["system"] = self.instructions
 
+        logger.trace(
+            f"{self} - Instructions: {self.instructions} - Chat history: {api_messages}"
+        )
+
         if self.tools_schema:
             kwargs["tools"] = self.tools_schema
 
@@ -90,7 +95,15 @@ class AnthropicLLM(LLMService):
         for block in response.content:
             if isinstance(block, TextBlock):
                 self.add_message(AnthropicAssistantMessage(content=block.text))
+
             elif isinstance(block, ToolUseBlock):
+                # Check if the tool name corresponds to a routing message
+                if routing_msg := self._get_routing_message(block.name, block.input):
+                    self.add_message(
+                        AnthropicAssistantMessage(content=str(block.input))
+                    )
+                    return routing_msg
+
                 tool_calls.append(block)
                 self.add_message(
                     ToolCall(
@@ -179,6 +192,7 @@ class AnthropicLLM(LLMService):
                     },
                 }
             )
+        logger.trace(f"{self} - Tools schema: {output}")
         return output
 
     def _type_schema_to_dict(self, schema: TypeSchema) -> dict:
