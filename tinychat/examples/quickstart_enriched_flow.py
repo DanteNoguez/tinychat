@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from loguru import logger
 
 from tinychat.messages.messages import (
-    IngressMessage,
     EgressMessage,
     Message,
 )
@@ -48,6 +47,11 @@ class ReplyRequestMessage(Message):
 class ReplyMessage(Message):
     content: str
     user_message: Message
+
+
+@dataclass(frozen=True)
+class CustomIngressMessage(Message):
+    user_id: str
 
 
 class LoggingObserver(BaseObserver):
@@ -101,7 +105,7 @@ class CRMProcessor(MessageProcessor):
             },
         }
 
-    async def _process(self, message: IngressMessage) -> Optional[Message]:
+    async def _process(self, message: CustomIngressMessage) -> Optional[Message]:
         user_id = message.user_id
         user_info = self._users.get(
             user_id, {"name": "Unknown", "email": "unknown@example.com", "tier": "free"}
@@ -239,7 +243,7 @@ async def main():
     # Flow: Ingress → CRM → DB → EnrichedMessage → [Agent Bus] → Egress
     bus = CompositeProcessor(
         handlers={
-            IngressMessage: crm,
+            CustomIngressMessage: crm,
             CRMMessage: db,
             EnrichedMessage: agent_bus,
         },
@@ -253,9 +257,8 @@ async def main():
     logger.info("Starting enriched message flow example")
     logger.info("=" * 80)
 
-    message = IngressMessage(
+    message = CustomIngressMessage(
         content="I need help with my account",
-        conversation_id="enriched-demo",
         user_id="user_123",
     )
 
