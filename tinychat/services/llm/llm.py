@@ -1,6 +1,5 @@
 from abc import abstractmethod
 
-from tinychat.messages.messages import Message
 from tinychat.processors.message_processor import MessageProcessor
 from tinychat.services.llm.models import LLMConfig, LLMMessage
 
@@ -45,13 +44,5 @@ class LLMService(MessageProcessor):
     def clear_history(self) -> None:
         """
         Clears the conversation history, preserving system prompts if applicable.
-        """
-        ...
-
-    @abstractmethod
-    async def generate_response(self, message: Message) -> Message:
-        """
-        Generates a response for the given input message.
-        Implementations should handle state updates internally.
         """
         ...

@@ -2,8 +2,7 @@ import os
 from dotenv import load_dotenv
 
 from typing import Optional, Any
-from dataclasses import dataclass
-from enum import Enum
+from dataclasses import dataclass, field
 
 from tinychat.messages.messages import Message
 from tinychat.services.llm.tools import Tool
@@ -24,10 +23,10 @@ class LLMMessage(Message):
 
 @dataclass(frozen=True)
 class ToolCall(LLMMessage):
-    role: str = "tool"
+    role: str = field(default="tool", init=False)
+    tool_call_type: str = field(default="function_call", init=False)
     tool_id: str
     tool_call_id: str
-    tool_call_type: str = "function_call"
     tool_name: str
     tool_arguments: dict[str, Any]
 
@@ -43,8 +42,8 @@ class ToolCall(LLMMessage):
 
 @dataclass(frozen=True)
 class ToolCallOutput(LLMMessage):
-    role: str = "tool"
-    tool_output_type: str = "function_call_output"
+    role: str = field(default="tool", init=False)
+    tool_output_type: str = field(default="function_call_output", init=False)
     tool_call_id: str
     tool_output: dict[str, Any]
 
@@ -54,12 +53,6 @@ class ToolCallOutput(LLMMessage):
             "call_id": self.tool_call_id,
             "output": self.tool_output,
         }
-
-
-class LLMReplyType(Enum, str):
-    CHAT_HISTORY = "chat_history"
-    ASSISTANT_MESSAGE = "assistant_message"
-    HISTORY_AND_TOOL_CALLS = "history_and_tools"
 
 
 @dataclass
@@ -76,7 +69,6 @@ class LLMConfig:
     include_metrics: bool = False
     reasoning_level: Optional[str] = None
     recursion_limit: int = 10
-    reply_type: LLMReplyType = LLMReplyType.ASSISTANT_MESSAGE
 
 
 ########################################################

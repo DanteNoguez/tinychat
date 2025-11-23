@@ -9,6 +9,7 @@ from typing import (
     get_args,
     get_origin,
     get_type_hints,
+    is_typeddict,
     Union,
     Dict,
     List,
@@ -17,6 +18,18 @@ from typing import (
 )
 from abc import abstractmethod
 from dataclasses import dataclass
+
+# NEW: Try to import Pydantic
+try:
+    from pydantic import BaseModel
+
+    HAS_PYDANTIC = True
+except ImportError:
+    HAS_PYDANTIC = False
+
+    class BaseModel:
+        pass  # Dummy for type checking
+
 
 from tinychat.utils.base_object import BaseObject
 
@@ -34,6 +47,9 @@ class TypeSchema:
     # For Objects (dicts)
     properties: Optional[Dict[str, "TypeSchema"]] = None
     required: Optional[List[str]] = None
+    nullable: bool = False
+    # Raw JSON Schema override (for Pydantic models)
+    json_schema: Optional[dict] = None
 
 
 @dataclass
@@ -46,24 +62,24 @@ class ToolParameter:
 
 class Tool(BaseObject):
     """
-    Base class for LLM tools.
+    Base class for LLM tools in tinychat.
 
     Subclasses must:
-    1. Implement the `run` method with standard Python type hints.
-    2. Add a docstring to the `run` method containing:
-        - A general description of the tool.
-        - The parameters of the tool with their descriptions, Sphinx-style.
+    - Implement the `run` method with standard Python type hints.
+    - Add a docstring to the `run` method containing:
+        1. A general description of the tool.
+        2. The parameters of the tool with their descriptions, Sphinx-style.
 
     Example:
 
-    async def run(self, operation: Literal["add", "subtract", "multiply", "divide"], a: float, b: float) -> float:
-        \"""
-        Perform basic arithmetic operations.
+    async def run(self, a: float, b: float) -> float:
+        '''
+        Add two numbers.
 
-        :param operation: The operation to perform.
         :param a: The first operand.
         :param b: The second operand.
-        \"""
+        '''
+
         return a + b
     """
 
@@ -176,11 +192,31 @@ class Tool(BaseObject):
         origin = get_origin(py_type) or py_type
         args = get_args(py_type)
 
-        # Unwrap Optional/Union (take the first non-None type)
+        # 1. CRITICAL: Block generic Dicts (Strict Mode Incompatibility)
+        # OpenAI Strict Mode requires additionalProperties=False, which forbids dynamic keys.
+        if origin is dict or origin is Dict:
+            raise ValueError(
+                f"Tool parameter in '{self.name}' uses 'dict'. "
+                "Generic dictionaries with dynamic keys are NOT supported in OpenAI Strict Mode. "
+                "Please use a Pydantic model or TypedDict with defined fields instead."
+            )
+
+        # 2. Handle Pydantic Models
+        if HAS_PYDANTIC and isinstance(origin, type) and issubclass(origin, BaseModel):
+            model_schema = origin.model_json_schema()
+            return TypeSchema(data_type="object", json_schema=model_schema)
+
+        # 3. Handle TypedDict
+        if is_typeddict(origin):
+            return self._map_typed_dict(origin)
+
+        # 4. Unwrap Optional/Union (take the first non-None type)
         if self._is_nullable(py_type):
             non_none = [arg for arg in args if arg is not type(None)]
             if len(non_none) == 1:
-                return self._map_python_type(non_none[0])
+                schema = self._map_python_type(non_none[0])
+                schema.nullable = True
+                return schema
 
         # Handle Literal (legacy enum support)
         if origin is Literal:
@@ -208,14 +244,37 @@ class Tool(BaseObject):
                 items_schema = self._map_python_type(args[0])
             return TypeSchema(data_type="array", items=items_schema)
 
-        # Dict / Object (Simplistic handling for now, prevents errors)
-        if origin is dict or origin is Dict:
-            return TypeSchema(data_type="object")
-
         # Fallback for unknown types
         raise ValueError(
             f"Tool {self.name} uses unsupported type {py_type}. "
-            f"Supported types are: str, int, float, bool, list, set, tuple, dict, Literal."
+            f"Supported types are: str, int, float, bool, list, set, tuple, Pydantic Models."
+        )
+
+    def _map_typed_dict(self, typed_dict_cls: Any) -> TypeSchema:
+        """
+        Recursively converts a TypedDict to a TypeSchema.
+        """
+        properties = {}
+        required_keys = []
+
+        # Resolve type hints (handles string forward refs automatically)
+        type_hints = get_type_hints(typed_dict_cls)
+
+        # TypedDicts have a __required_keys__ frozenset (Python 3.9+)
+        required_set = getattr(typed_dict_cls, "__required_keys__", frozenset())
+
+        for name, type_hint in type_hints.items():
+            # Recursive call allows nested TypedDicts
+            properties[name] = self._map_python_type(type_hint)
+
+            if name in required_set:
+                required_keys.append(name)
+
+        return TypeSchema(
+            data_type="object",
+            properties=properties,
+            required=required_keys,
+            nullable=False,
         )
 
     @abstractmethod

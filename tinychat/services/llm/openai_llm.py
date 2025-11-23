@@ -1,5 +1,6 @@
 import json
 from typing import Optional
+from loguru import logger
 
 from openai import AsyncOpenAI
 from openai.types.responses import Response
@@ -18,6 +19,16 @@ from tinychat.services.llm.models import (
 from tinychat.services.llm.llm import LLMService
 from tinychat.services.llm.tools import TypeSchema
 
+try:
+    from pydantic import BaseModel
+
+    HAS_PYDANTIC = True
+except ImportError:
+    HAS_PYDANTIC = False
+
+    class BaseModel:
+        pass  # Dummy for type checking
+
 
 OPENAI_ROLE_TO_MESSAGE_CLASS_MAP = {
     "assistant": OpenAIAssistantMessage,
@@ -26,6 +37,8 @@ OPENAI_ROLE_TO_MESSAGE_CLASS_MAP = {
 }
 
 
+# Responses API docs: https://platform.openai.com/docs/api-reference/responses/create
+# Function calling docs: https://platform.openai.com/docs/guides/function-calling
 class OpenAILLM(LLMService):
     def __init__(
         self,
@@ -98,7 +111,7 @@ class OpenAILLM(LLMService):
     # MessageProcessor Implementation (Strict Boundary)
     # ==========================================================================
 
-    async def _process(self, message: Message) -> Optional[Message]:
+    async def _process(self, message: Message) -> Message:
         """
         Processes an incoming message using strict stateful logic.
 
@@ -109,6 +122,7 @@ class OpenAILLM(LLMService):
         # 1. Ingest
         llm_message = self._ensure_llm_message(message)
         self.add_message(llm_message)
+        logger.debug(f"{self} - Current chat history: {self.chat_history}")
 
         # 2. Process & Egress
         # _generate_completion handles adding the response to history internally
@@ -172,6 +186,9 @@ class OpenAILLM(LLMService):
             try:
                 function_args = json.loads(item.arguments)
                 if tool := self.tools_by_name.get(function_name):
+                    logger.debug(
+                        f"{self} - Executing tool: {function_name} with arguments: {function_args}"
+                    )
                     result = await tool.run(**function_args)
                     result_str = str(result)
                 else:
@@ -244,8 +261,8 @@ class OpenAILLM(LLMService):
                 param_schema = self._type_schema_to_dict(param.schema)
                 param_schema["description"] = param.description
                 properties[param.name] = param_schema
-                if param.required:
-                    required.append(param.name)
+                # In Strict Mode, all parameters must be listed as required.
+                required.append(param.name)
 
             output.append(
                 {
@@ -264,7 +281,19 @@ class OpenAILLM(LLMService):
         return output
 
     def _type_schema_to_dict(self, schema: TypeSchema) -> dict:
-        json_schema = {"type": schema.data_type}
+        # Override for Pydantic Models
+        if schema.json_schema:
+            # If we have a pre-generated schema (from Pydantic), use it.
+            # We must ensure additionalProperties is False recursively for Strict Mode.
+            final_schema = self._enforce_strict_mode(schema.json_schema)
+            if schema.nullable:
+                current_type = final_schema.get("type")
+                if isinstance(current_type, str):
+                    final_schema["type"] = [current_type, "null"]
+            return final_schema
+
+        type_val = [schema.data_type, "null"] if schema.nullable else schema.data_type
+        json_schema = {"type": type_val}
         if schema.description:
             json_schema["description"] = schema.description
         if schema.enum:
@@ -278,3 +307,39 @@ class OpenAILLM(LLMService):
             json_schema["required"] = schema.required or []
             json_schema["additionalProperties"] = False
         return json_schema
+
+    def _enforce_strict_mode(self, schema: dict) -> dict:
+        """
+        Recursively ensures a JSON schema is compatible with OpenAI Strict Mode.
+        Mainly enforces additionalProperties: False on all objects.
+        """
+        new_schema = schema.copy()
+
+        # Clean up Pydantic metadata OpenAI doesn't like
+        new_schema.pop("title", None)
+
+        schema_type = new_schema.get("type")
+
+        if schema_type == "object":
+            new_schema["additionalProperties"] = False
+
+            if "properties" in new_schema:
+                new_props = {}
+                for k, v in new_schema["properties"].items():
+                    new_props[k] = self._enforce_strict_mode(v)
+                new_schema["properties"] = new_props
+
+                if "required" not in new_schema:
+                    new_schema["required"] = list(new_props.keys())
+
+        if schema_type == "array" and "items" in new_schema:
+            new_schema["items"] = self._enforce_strict_mode(new_schema["items"])
+
+        # Handle Defs ($defs) - Pydantic puts shared definitions here
+        if defs := new_schema.get("$defs"):
+            new_defs = {}
+            for k, v in defs.items():
+                new_defs[k] = self._enforce_strict_mode(v)
+            new_schema["$defs"] = new_defs
+
+        return new_schema

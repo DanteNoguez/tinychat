@@ -18,9 +18,9 @@ from tinychat.observers.observer import (
 from tinychat.services.llm.models import (
     OpenAILLMConfig,
     OpenAISystemMessage,
-    LLMMessage,
+    OpenAIAssistantMessage,
 )
-from typing import Any, Optional
+from typing import Optional, TypedDict
 from tinychat.services.llm.tools import Tool
 from tinychat.services.llm.openai_llm import OpenAILLM
 from tinychat.utils.logging import configure_pretty_logging
@@ -34,6 +34,10 @@ configure_pretty_logging(debug_level=5)
 # The run method is called by the agent to execute tool calls.
 # The tool subclass can be of any arbitrary complexity.
 class CalculatorTool(Tool):
+    class ExtraData(TypedDict):
+        names: list[str]
+        values: list[int]
+
     def __init__(self, *, name: str, precision: int = 2):
         super().__init__(name=name)
         self.precision = precision
@@ -60,7 +64,7 @@ class CalculatorTool(Tool):
         operation: str,
         a: float,
         b: float,
-        extra_data: Optional[list[dict[str, Any]]] = None,
+        extra_data: Optional[ExtraData] = None,
     ) -> str:
         """
         Perform basic arithmetic operations.
@@ -132,7 +136,9 @@ async def main():
     chatbot = CompositeProcessor(
         handlers={
             IngressMessage: llm,
-            LLMMessage: EgressMessageProcessor(name="egress_message_processor"),
+            OpenAIAssistantMessage: EgressMessageProcessor(
+                name="egress_message_processor"
+            ),
         },
     )
     await chatbot.setup(config)
