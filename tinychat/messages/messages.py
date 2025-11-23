@@ -1,5 +1,4 @@
 import time
-from typing import Optional
 from dataclasses import dataclass, field
 
 from tinychat.utils.utils import random_id
@@ -19,15 +18,11 @@ class Message:
 
 
 @dataclass(frozen=True)
-class IngressMessage(Message):
-    user_id: Optional[str] = None
-    conversation_id: Optional[str] = None
+class IngressMessage(Message): ...
 
 
 @dataclass(frozen=True)
-class EgressMessage(Message):
-    user_id: Optional[str] = None
-    conversation_id: Optional[str] = None
+class EgressMessage(Message): ...
 
 
 @dataclass(frozen=True)
