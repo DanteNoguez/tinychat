@@ -59,12 +59,14 @@ class LoggingObserver(BaseObserver):
         self._received_messages: dict[str, MessageReceived] = {}
 
     async def on_message_received(self, message: MessageReceived) -> None:
-        logger.info(f"📨 [{message.source_processor.name}] Received: {message.content}")
+        logger.debug(
+            f"📨 [{message.source_processor.name}] Received: {message.content}"
+        )
         # Track received message for latency calculation
         self._received_messages[message.source_message.id] = message
 
     async def on_message_processed(self, message: MessageProcessed) -> None:
-        logger.info(
+        logger.debug(
             f"✅ [{message.source_processor.name}] Processed: {message.content}"
         )
 
@@ -73,7 +75,7 @@ class LoggingObserver(BaseObserver):
         if received_msg:
             latency_ns = message.timestamp - received_msg.timestamp
             latency_us = latency_ns / 1_000
-            logger.info(
+            logger.debug(
                 f"⏱️  [{message.source_processor.name}] Latency: {latency_us:.2f}μs"
             )
             del self._received_messages[message.source_message.id]
@@ -253,9 +255,7 @@ async def main():
     await bus.setup(config)
 
     # Create and process ingress message
-    logger.info("=" * 80)
     logger.info("Starting enriched message flow example")
-    logger.info("=" * 80)
 
     message = CustomIngressMessage(
         content="I need help with my account",
@@ -264,9 +264,7 @@ async def main():
 
     result = await bus.process(message)
 
-    logger.info("=" * 80)
-    logger.info(f"Final result: {result.content if result else 'None'}")
-    logger.info("=" * 80)
+    logger.success(f"Final result: {result.content if result else 'None'}")
 
 
 if __name__ == "__main__":
