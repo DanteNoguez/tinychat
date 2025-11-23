@@ -19,7 +19,6 @@ from typing import (
 from abc import abstractmethod
 from dataclasses import dataclass
 
-# NEW: Try to import Pydantic
 try:
     from pydantic import BaseModel
 
