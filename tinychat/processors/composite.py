@@ -49,11 +49,9 @@ class CompositeProcessor(MessageProcessor):
         *,
         handlers: dict[type[Message], MessageProcessor],
         max_hops: int = 30,
-        output_types: set[type[Message]] | None = None,
+        **kwargs,
     ):
-        super().__init__(
-            output_types=output_types,
-        )
+        super().__init__(**kwargs)
         self._handlers = handlers
         self._processors = {p.id: p for p in handlers.values()}
         self._max_hops = max_hops

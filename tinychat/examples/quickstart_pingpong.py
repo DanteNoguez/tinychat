@@ -101,7 +101,6 @@ async def main():
     # Create and process ingress message
     message = IngressMessage(
         content="Hello, let's play ping pong!",
-        conversation_id="pingpong-demo",
     )
 
     await bus.process(message)
