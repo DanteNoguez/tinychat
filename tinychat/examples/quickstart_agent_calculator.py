@@ -119,7 +119,6 @@ async def main():
     # Create and process a math question
     message = IngressMessage(
         content="What is 42 multiplied by 13? Then add 100 to that result.",
-        conversation_id="calculator-demo",
     )
 
     logger.debug(f"{llm} - Tools schema: {llm.tools_schema}")
