@@ -156,20 +156,29 @@ class CompositeProcessor(MessageProcessor):
         """
         Validate topology if processors declare output types.
 
-        Checks that all declared output types have handlers registered.
-        Terminal types (None, EgressMessage) are excluded from validation.
-        Processors without declared output_types are skipped.
+        Checks:
+        1. All declared output types (except terminals) have handlers.
+        2. At least one terminal type is produced (prevent infinite loops).
         """
         unhandled_types: set[tuple[str, str]] = set()
-        terminal_types = {type(None), EgressMessage}
+        has_terminal = False
+        all_typed = True
 
         for processor in self._processors.values():
             if processor.output_types is None:
+                all_typed = False
                 continue
 
             for output_type in processor.output_types:
-                if output_type in terminal_types:
+                is_terminal = output_type is type(None) or (
+                    isinstance(output_type, type)
+                    and issubclass(output_type, EgressMessage)
+                )
+
+                if is_terminal:
+                    has_terminal = True
                     continue
+
                 if output_type not in self._handlers:
                     unhandled_types.add((processor.name, output_type.__name__))
 
@@ -181,6 +190,13 @@ class CompositeProcessor(MessageProcessor):
             raise ValueError(
                 "Topology validation failed. Unhandled message types:\n"
                 + "\n".join(error_lines)
+            )
+
+        if all_typed and not has_terminal:
+            raise ValueError(
+                "Topology validation failed. No terminal state detected.\n"
+                "The graph forms a closed loop and will always crash with MaxHopsExceededError.\n"
+                "Ensure at least one processor produces 'EgressMessage' (or subclass) or 'None'."
             )
 
     @property

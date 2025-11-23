@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from loguru import logger
 
 from tinychat.messages.messages import (
-    IngressMessage,
     EgressMessage,
     Message,
 )
@@ -50,17 +49,24 @@ class ReplyMessage(Message):
     user_message: Message
 
 
+@dataclass(frozen=True)
+class CustomIngressMessage(Message):
+    user_id: str
+
+
 class LoggingObserver(BaseObserver):
     def __init__(self):
         self._received_messages: dict[str, MessageReceived] = {}
 
     async def on_message_received(self, message: MessageReceived) -> None:
-        logger.info(f"📨 [{message.source_processor.name}] Received: {message.content}")
+        logger.debug(
+            f"📨 [{message.source_processor.name}] Received: {message.content}"
+        )
         # Track received message for latency calculation
         self._received_messages[message.source_message.id] = message
 
     async def on_message_processed(self, message: MessageProcessed) -> None:
-        logger.info(
+        logger.debug(
             f"✅ [{message.source_processor.name}] Processed: {message.content}"
         )
 
@@ -69,7 +75,7 @@ class LoggingObserver(BaseObserver):
         if received_msg:
             latency_ns = message.timestamp - received_msg.timestamp
             latency_us = latency_ns / 1_000
-            logger.info(
+            logger.debug(
                 f"⏱️  [{message.source_processor.name}] Latency: {latency_us:.2f}μs"
             )
             del self._received_messages[message.source_message.id]
@@ -101,7 +107,7 @@ class CRMProcessor(MessageProcessor):
             },
         }
 
-    async def _process(self, message: IngressMessage) -> Optional[Message]:
+    async def _process(self, message: CustomIngressMessage) -> Optional[Message]:
         user_id = message.user_id
         user_info = self._users.get(
             user_id, {"name": "Unknown", "email": "unknown@example.com", "tier": "free"}
@@ -239,7 +245,7 @@ async def main():
     # Flow: Ingress → CRM → DB → EnrichedMessage → [Agent Bus] → Egress
     bus = CompositeProcessor(
         handlers={
-            IngressMessage: crm,
+            CustomIngressMessage: crm,
             CRMMessage: db,
             EnrichedMessage: agent_bus,
         },
@@ -249,21 +255,16 @@ async def main():
     await bus.setup(config)
 
     # Create and process ingress message
-    logger.info("=" * 80)
     logger.info("Starting enriched message flow example")
-    logger.info("=" * 80)
 
-    message = IngressMessage(
+    message = CustomIngressMessage(
         content="I need help with my account",
-        conversation_id="enriched-demo",
         user_id="user_123",
     )
 
     result = await bus.process(message)
 
-    logger.info("=" * 80)
-    logger.info(f"Final result: {result.content if result else 'None'}")
-    logger.info("=" * 80)
+    logger.success(f"Final result: {result.content if result else 'None'}")
 
 
 if __name__ == "__main__":

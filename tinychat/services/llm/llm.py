@@ -1,16 +1,19 @@
 from abc import abstractmethod
+from typing import Optional
+
+from loguru import logger
 
 from tinychat.processors.message_processor import MessageProcessor
+from tinychat.messages.messages import Message
 from tinychat.services.llm.models import LLMConfig, LLMMessage
 
 
 class LLMService(MessageProcessor):
     """
-    Abstract base class for LLM services.
+    Base class for LLM services.
 
-    This defines the contract that all LLM implementations (OpenAI, Anthropic, etc.)
-    must follow. It ensures consistent interaction patterns regardless of the
-    underlying API's state management or message formats.
+    Manages conversation history as a list of typed LLMMessage objects,
+    handles tool execution, and defines the standard processing flow.
     """
 
     def __init__(
@@ -22,27 +25,87 @@ class LLMService(MessageProcessor):
         super().__init__(**kwargs)
         self._llm_config = llm_config
 
+        # State: Normalized history and instructions
+        self.chat_history: list[LLMMessage] = []
+        self.instructions: Optional[str] = llm_config.instructions
+
+        # Tools Setup
+        self.tools = llm_config.tools or []
+        self.tools_by_name = {tool.name: tool for tool in self.tools}
+
+    # ==========================================================================
+    # Public API & State Management
+    # ==========================================================================
+
     @property
-    @abstractmethod
     def context(self) -> list[LLMMessage]:
-        """
-        Returns the current conversation history as a list of standard LLMMessage objects.
+        """Returns the current conversation history (already in standard format)."""
+        return self.chat_history
 
-        This provides a unified view of the state for observers and evaluators,
-        hiding the internal representation (e.g., dicts for OpenAI, objects for Anthropic).
-        """
-        ...
-
-    @abstractmethod
     def add_message(self, message: LLMMessage) -> None:
+        """Manually adds a message to the conversation history."""
+        self.chat_history.append(message)
+
+    def add_messages(self, messages: list[LLMMessage]) -> None:
+        """Manually adds multiple messages to the history."""
+        self.chat_history.extend(messages)
+
+    def clear_history(self) -> None:
+        """Clears the conversation history."""
+        self.chat_history.clear()
+
+    def set_instructions(self, instructions: str) -> None:
+        """Sets the persistent instructions (system prompt) for the LLM."""
+        self.instructions = instructions
+
+    # ==========================================================================
+    # MessageProcessor Implementation
+    # ==========================================================================
+
+    async def _process(self, message: Message) -> LLMMessage:
         """
-        Manually adds a message to the conversation history.
+        Standard LLM processing flow:
+        1. Ingest: Convert incoming message to LLMMessage and append to history.
+        2. Generate: Call implementation-specific generation (handles tools/recursion).
+        3. Return: Return the final assistant response.
         """
-        ...
+        # 1. Ingest
+        llm_message = self._ensure_llm_message(message)
+        self.add_message(llm_message)
+
+        # 2. Generate (implementation handles history updates for response/tools)
+        response = await self._generate_completion()
+
+        return response
+
+    async def execute_tool(self, name: str, arguments: dict) -> str:
+        """Executes a tool by name and returns the result as a string."""
+        if tool := self.tools_by_name.get(name):
+            try:
+                logger.debug(f"Executing tool {name} with args {arguments}")
+                result = await tool.run(**arguments)
+                return str(result)
+            except Exception as e:
+                logger.error(f"Error executing tool {name}: {e}")
+                return f"Error executing tool {name}: {str(e)}"
+
+        return f"Error: Tool {name} not found."
+
+    # ==========================================================================
+    # Abstract Methods
+    # ==========================================================================
 
     @abstractmethod
-    def clear_history(self) -> None:
+    async def _generate_completion(self) -> LLMMessage:
         """
-        Clears the conversation history, preserving system prompts if applicable.
+        Generates a completion from the LLM.
+        Must handle:
+        - Converting self.chat_history to provider format
+        - Calling API
+        - Handling tool calls (recursion)
+        - Appending results to self.chat_history
         """
-        ...
+
+    @abstractmethod
+    def _ensure_llm_message(self, message: Message) -> LLMMessage:
+        """Converts a generic Message to a provider-specific LLMMessage (User role)."""

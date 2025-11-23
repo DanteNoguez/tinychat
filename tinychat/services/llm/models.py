@@ -1,4 +1,5 @@
 import os
+import json
 from dotenv import load_dotenv
 
 from typing import Optional, Any
@@ -20,11 +21,16 @@ class LLMMessage(Message):
             "content": self.content,
         }
 
+    def to_anthropic_format(self) -> dict:
+        return {
+            "role": self.role,
+            "content": self.content,
+        }
+
 
 @dataclass(frozen=True)
 class ToolCall(LLMMessage):
     role: str = field(default="tool", init=False)
-    tool_call_type: str = field(default="function_call", init=False)
     tool_id: str
     tool_call_id: str
     tool_name: str
@@ -34,24 +40,48 @@ class ToolCall(LLMMessage):
         return {
             "id": self.tool_id,
             "call_id": self.tool_call_id,
-            "type": self.tool_call_type,
+            "type": "function_call",
             "name": self.tool_name,
-            "arguments": self.tool_arguments,
+            "arguments": json.dumps(self.tool_arguments),
+        }
+
+    def to_anthropic_format(self) -> dict:
+        return {
+            "role": "assistant",
+            "content": [
+                {
+                    "type": "tool_use",
+                    "id": self.tool_call_id,
+                    "name": self.tool_name,
+                    "input": self.tool_arguments,
+                }
+            ],
         }
 
 
 @dataclass(frozen=True)
 class ToolCallOutput(LLMMessage):
     role: str = field(default="tool", init=False)
-    tool_output_type: str = field(default="function_call_output", init=False)
     tool_call_id: str
-    tool_output: dict[str, Any]
+    tool_output: str
 
     def to_openai_format(self) -> dict:
         return {
-            "type": self.tool_output_type,
+            "type": "function_call_output",
             "call_id": self.tool_call_id,
             "output": self.tool_output,
+        }
+
+    def to_anthropic_format(self) -> dict:
+        return {
+            "role": "user",
+            "content": [
+                {
+                    "type": "tool_result",
+                    "tool_use_id": self.tool_call_id,
+                    "content": self.tool_output,
+                }
+            ],
         }
 
 
@@ -63,7 +93,7 @@ class LLMConfig:
     max_tokens: int = 1000
     enable_retries: bool = True
     max_retries: int = 3
-    prompt: Optional[LLMMessage] = None
+    instructions: Optional[str] = None
     tools: Optional[list[Tool]] = None
     base_url: Optional[str] = None
     include_metrics: bool = False
@@ -92,8 +122,25 @@ class OpenAISystemMessage(LLMMessage):
     role: str = "system"
 
 
+@dataclass(frozen=True)
+class AnthropicUserMessage(LLMMessage):
+    role: str = "user"
+
+
+@dataclass(frozen=True)
+class AnthropicAssistantMessage(LLMMessage):
+    role: str = "assistant"
+
+
 @dataclass
 class OpenAILLMConfig(LLMConfig):
     model_name: str = "gpt-4.1"
     temperature: float = 1.0
     api_key: str = os.getenv("OPENAI_API_KEY")
+
+
+@dataclass
+class AnthropicLLMConfig(LLMConfig):
+    model_name: str = "claude-sonnet-4-5"
+    api_key: str = os.getenv("ANTHROPIC_API_KEY")
+    max_tokens: int = 1000
