@@ -1,5 +1,5 @@
 import time
-from typing import Any, Dict, List, Optional
+from typing import Optional
 from dataclasses import dataclass, field
 
 from tinychat.utils.utils import random_id
@@ -31,29 +31,4 @@ class EgressMessage(Message):
 
 
 @dataclass(frozen=True)
-class LLMMessage(Message):
-    role: str
-
-    def to_openai_message(self) -> dict:
-        return {
-            "role": self.role,
-            "content": self.content,
-        }
-
-
-@dataclass(frozen=True)
-class AIMessage(LLMMessage):
-    """
-    AI-generated message. Note: tool_calls uses mutable containers to allow
-    modification during conversation processing (e.g., streaming tool calls).
-    The message structure itself remains immutable (frozen).
-    """
-
-    role: str = "assistant"
-    tool_calls: Optional[List[Dict[str, Any]]] = None
-    reasoning: Optional[str] = None
-
-
-@dataclass(frozen=True)
-class ControlMessage(Message):
-    pass
+class ControlMessage(Message): ...
