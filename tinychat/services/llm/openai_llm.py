@@ -47,7 +47,9 @@ class OpenAILLM(LLMService):
         client: Optional[AsyncOpenAI] = None,
         **kwargs,
     ):
-        super().__init__(llm_config=llm_config, **kwargs)
+        super().__init__(
+            llm_config=llm_config, output_types={OpenAIAssistantMessage}, **kwargs
+        )
         self.client = client or AsyncOpenAI(
             api_key=llm_config.api_key,
             max_retries=llm_config.max_retries if llm_config.enable_retries else None,
@@ -111,7 +113,7 @@ class OpenAILLM(LLMService):
     # MessageProcessor Implementation (Strict Boundary)
     # ==========================================================================
 
-    async def _process(self, message: Message) -> Message:
+    async def _process(self, message: Message) -> OpenAIAssistantMessage:
         """
         Processes an incoming message using strict stateful logic.
 

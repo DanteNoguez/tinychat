@@ -1,38 +1,30 @@
 import asyncio
 from loguru import logger
 
+from typing import Optional, TypedDict, Literal
+
 from tinychat.messages.messages import (
     IngressMessage,
     EgressMessage,
+    Message,
 )
 from tinychat.asynchronous.manager import TaskManagerParams
 from tinychat.processors.message_processor import MessageProcessor, SetupConfig
 from tinychat.processors.composite import CompositeProcessor
-from tinychat.observers.observer import (
-    BaseObserver,
-    MessageReceived,
-    MessageProcessed,
-    Message,
-)
-
 from tinychat.services.llm.models import (
     OpenAILLMConfig,
     OpenAISystemMessage,
     OpenAIAssistantMessage,
 )
-from typing import Optional, TypedDict
 from tinychat.services.llm.tools import Tool
 from tinychat.services.llm.openai_llm import OpenAILLM
-from tinychat.utils.logging import configure_pretty_logging
-
-
-# Trace level logging allows us to see LLM behavior in the console.
-configure_pretty_logging(debug_level=5)
 
 
 # In tinychat, tools are defined as classes that inherit from the Tool class.
 # The run method is called by the agent to execute tool calls.
 # The tool subclass can be of any arbitrary complexity.
+# Type annotations and the run metod's docstring are used to generate the tool's definition for the LLM.
+# Object arguments in the run method must be either a Pydantic model or a TypedDict.
 class CalculatorTool(Tool):
     class ExtraData(TypedDict):
         names: list[str]
@@ -42,9 +34,6 @@ class CalculatorTool(Tool):
         super().__init__(name=name)
         self.precision = precision
 
-    def _validate_operation(self, operation: str) -> bool:
-        return operation in ["add", "subtract", "multiply", "divide"]
-
     def _perform_calculation(self, operation: str, a: float, b: float) -> float | str:
         operations = {
             "add": lambda x, y: x + y,
@@ -52,6 +41,10 @@ class CalculatorTool(Tool):
             "multiply": lambda x, y: x * y,
             "divide": lambda x, y: x / y if y != 0 else "Error: Division by zero",
         }
+
+        if operation not in operations:
+            return "Error: Invalid operation. Valid operations are: add, subtract, multiply, divide."
+
         return operations[operation](a, b)
 
     def _format_result(self, result: float | str) -> str:
@@ -61,7 +54,7 @@ class CalculatorTool(Tool):
 
     async def run(
         self,
-        operation: str,
+        operation: Literal["add", "subtract", "multiply", "divide"],
         a: float,
         b: float,
         extra_data: Optional[ExtraData] = None,
@@ -69,41 +62,21 @@ class CalculatorTool(Tool):
         """
         Perform basic arithmetic operations.
 
-        :param operation: The operation to perform. Must be one of: add, subtract, multiply, divide.
-        :param a: The first number.
-        :param b: The second number.
+        :param operation: The operation to perform.
+        :param a: The first operand.
+        :param b: The second operand.
         :param extra_data: Extra data to be used in the calculation.
         """
-        if not self._validate_operation(operation):
-            return "Error: Invalid operation. Valid operations are: add, subtract, multiply, divide."
-
         result = self._perform_calculation(operation, a, b)
         formatted = self._format_result(result)
         return f"Result: {formatted}"
 
 
-class LoggingObserver(BaseObserver):
-    async def on_message_received(self, message: MessageReceived) -> None:
-        logger.debug(
-            f"📨 [{message.source_processor.name}] Received: {message.content}"
-        )
-
-    async def on_message_processed(self, message: MessageProcessed) -> None:
-        logger.debug(
-            f"✅ [{message.source_processor.name}] Returned: {message.content}"
-        )
-
-    async def on_exception(self, source_message: Message, exception: Exception) -> None:
-        logger.error(
-            f"❌ [{source_message.name}] Exception: {exception} at {source_message.timestamp}"
-        )
-
-
 class EgressMessageProcessor(MessageProcessor):
-    def __init__(self, *, name: str):
-        super().__init__(name=name)
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
 
-    async def _process(self, message: Message) -> Message:
+    async def _process(self, message: Message) -> EgressMessage:
         return EgressMessage(content=message.content)
 
 
@@ -111,7 +84,12 @@ async def main():
     # Setup configuration
     config = SetupConfig(
         task_manager_params=TaskManagerParams(loop=asyncio.get_running_loop()),
-        observers=[LoggingObserver()],
+    )
+
+    # Create calculator tool
+    calculator = CalculatorTool(
+        name="calculator",
+        precision=2,
     )
 
     # Create LLM processor with output type declaration
@@ -123,27 +101,20 @@ async def main():
             model_name="gpt-4.1",
             temperature=0.0,
             max_tokens=300,
-            tools=[
-                CalculatorTool(
-                    name="calculate",
-                    precision=2,
-                )
-            ],
+            tools=[calculator],
         )
     )
+
+    egress = EgressMessageProcessor(output_types={EgressMessage})
 
     # Setup composite processor with simple routing
     chatbot = CompositeProcessor(
         handlers={
             IngressMessage: llm,
-            OpenAIAssistantMessage: EgressMessageProcessor(
-                name="egress_message_processor"
-            ),
+            OpenAIAssistantMessage: egress,
         },
     )
     await chatbot.setup(config)
-
-    logger.info(llm.tools_schema)
 
     # Create and process a math question
     message = IngressMessage(
@@ -151,7 +122,11 @@ async def main():
         conversation_id="calculator-demo",
     )
 
+    logger.debug(f"{llm} - Tools schema: {llm.tools_schema}")
+
     result = await chatbot.process(message)
+
+    logger.debug(f"{llm} - Chat history: {llm.chat_history}")
 
     logger.success(f"Final Result: {result.content}")
 
