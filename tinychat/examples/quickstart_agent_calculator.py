@@ -20,6 +20,7 @@ from tinychat.services.llm.models import (
     OpenAISystemMessage,
     LLMMessage,
 )
+from typing import Any, Optional
 from tinychat.services.llm.tools import Tool
 from tinychat.services.llm.openai_llm import OpenAILLM
 from tinychat.utils.logging import configure_pretty_logging
@@ -54,13 +55,20 @@ class CalculatorTool(Tool):
             return result
         return f"{result:.{self.precision}f}"
 
-    async def run(self, operation: str, a: float, b: float) -> str:
+    async def run(
+        self,
+        operation: str,
+        a: float,
+        b: float,
+        extra_data: Optional[list[dict[str, Any]]] = None,
+    ) -> str:
         """
         Perform basic arithmetic operations.
 
         :param operation: The operation to perform. Must be one of: add, subtract, multiply, divide.
         :param a: The first number.
         :param b: The second number.
+        :param extra_data: Extra data to be used in the calculation.
         """
         if not self._validate_operation(operation):
             return "Error: Invalid operation. Valid operations are: add, subtract, multiply, divide."
@@ -128,6 +136,8 @@ async def main():
         },
     )
     await chatbot.setup(config)
+
+    logger.info(llm.tools_schema)
 
     # Create and process a math question
     message = IngressMessage(
