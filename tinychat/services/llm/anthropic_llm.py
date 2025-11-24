@@ -46,9 +46,14 @@ class AnthropicLLM(LLMService):
         if depth > self._llm_config.recursion_limit:
             raise RuntimeError("Recursion limit reached.")
 
-        # Prepare Messages
-        # Convert internal history to Anthropic format
-        raw_history = [m.to_anthropic_format() for m in self.chat_history]
+        # Handle system message in history (remove if present for Anthropic API messages list)
+        messages_to_process = (
+            self.chat_history[1:]
+            if self.chat_history[0].role == "system"
+            else self.chat_history
+        )
+
+        raw_history = [m.to_anthropic_format() for m in messages_to_process]
 
         # Ensure alternation (Anthropic strict requirement)
         api_messages = self._prepare_messages_for_api(raw_history)
@@ -62,7 +67,7 @@ class AnthropicLLM(LLMService):
 
         # Use "instructions" via the system parameter
         if self.instructions:
-            kwargs["system"] = self.instructions
+            kwargs["system"] = self.instructions.content
 
         if self.tools_schema:
             kwargs["tools"] = self.tools_schema

@@ -29,7 +29,8 @@ class LLMService(MessageProcessor):
 
         # State: Normalized history and instructions
         self.chat_history: list[LLMMessage] = []
-        self.instructions: Optional[str] = llm_config.instructions
+        self.instructions: Optional[LLMMessage] = None
+        self.set_instructions(llm_config.instructions)
 
         # Tools Setup
         self.tools = llm_config.tools or []
@@ -81,9 +82,17 @@ class LLMService(MessageProcessor):
         self.chat_history.clear()
         self.create_task(self._notify_context_update(self.chat_history))
 
-    def set_instructions(self, instructions: str) -> None:
-        """Sets the persistent instructions (system prompt) for the LLM."""
-        self.instructions = instructions
+    def set_instructions(self, instructions: Optional[str] = None) -> None:
+        """Sets the persistent instructions (system message) for the LLM."""
+        if not instructions:
+            return
+
+        self.instructions = LLMMessage(role="system", content=instructions)
+        # Update chat history: ensure first message is the system instruction
+        if self.chat_history and self.chat_history[0].role == "system":
+            self.chat_history[0] = self.instructions
+        else:
+            self.chat_history.insert(0, self.instructions)
 
     # ==========================================================================
     # MessageProcessor Implementation

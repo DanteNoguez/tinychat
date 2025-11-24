@@ -45,13 +45,7 @@ class OpenAILLM(LLMService):
         if depth > self._llm_config.recursion_limit:
             raise RuntimeError("Recursion limit reached.")
 
-        # Prepare Messages
-        api_messages: list[dict] = []
-        if self.instructions:
-            api_messages.append({"role": "system", "content": self.instructions})
-
-        # Convert internal history to OpenAI format
-        api_messages.extend([m.to_openai_format() for m in self.chat_history])
+        api_messages = [m.to_openai_format() for m in self.chat_history]
 
         logger.trace(f"{self} - API request: Chat history: {api_messages}")
         response = await self.client.responses.create(

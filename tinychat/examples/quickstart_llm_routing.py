@@ -15,8 +15,6 @@ from tinychat.observers.observer import LLMObserver, MessageProcessed, MessageRe
 
 load_dotenv()
 
-# configure_pretty_logging(debug_level=5)
-
 # ==============================================================================
 # 1. Define Message Types (The "Protocol")
 # ==============================================================================
