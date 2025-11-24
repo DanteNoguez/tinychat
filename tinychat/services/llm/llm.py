@@ -172,7 +172,7 @@ class LLMService(MessageProcessor):
         for observer in self._observers:
             if isinstance(observer, LLMObserver):
                 try:
-                    return await observer.on_tool_call(tool_call)
+                    await observer.on_tool_call(tool_call)
                 except Exception as e:
                     logger.exception(f"Observer {observer} failed on_tool_call: {e}")
 
@@ -183,7 +183,7 @@ class LLMService(MessageProcessor):
         for observer in self._observers:
             if isinstance(observer, LLMObserver):
                 try:
-                    return await observer.on_tool_result(tool_result)
+                    await observer.on_tool_result(tool_result)
                 except Exception as e:
                     logger.exception(f"Observer {observer} failed on_tool_result: {e}")
 
@@ -194,7 +194,7 @@ class LLMService(MessageProcessor):
         for observer in self._observers:
             if isinstance(observer, LLMObserver):
                 try:
-                    return await observer.on_llm_generation(llm_message)
+                    await observer.on_llm_generation(llm_message)
                 except Exception as e:
                     logger.exception(
                         f"Observer {observer} failed on_llm_generation: {e}"
@@ -207,7 +207,7 @@ class LLMService(MessageProcessor):
         for observer in self._observers:
             if isinstance(observer, LLMObserver):
                 try:
-                    return await observer.on_context_update(messages)
+                    await observer.on_context_update(messages)
                 except Exception as e:
                     logger.exception(
                         f"Observer {observer} failed on_context_update: {e}"
@@ -220,6 +220,6 @@ class LLMService(MessageProcessor):
         for observer in self._observers:
             if isinstance(observer, LLMObserver):
                 try:
-                    return await observer.on_llm_routing(message)
+                    await observer.on_llm_routing(message)
                 except Exception as e:
                     logger.exception(f"Observer {observer} failed on_llm_routing: {e}")

@@ -116,7 +116,7 @@ class MessageProcessor(BaseObject):
             raise
 
         self.create_task(
-            self._notify_processed(message, result),
+            self._notify_processed(message, result, time.monotonic_ns()),
             name="notify_processed",
         )
 
@@ -147,7 +147,7 @@ class MessageProcessor(BaseObject):
 
         for observer in self._observers:
             try:
-                return await observer.on_message_received(data)
+                await observer.on_message_received(data)
             except Exception as e:
                 logger.exception(f"Observer {observer} failed on_message_received: {e}")
 
@@ -155,7 +155,7 @@ class MessageProcessor(BaseObject):
         self,
         message: Message,
         result: Optional[Message],
-        timestamp: int = time.monotonic_ns(),
+        timestamp: int,
     ) -> None:
         if not self._observers:
             return
@@ -191,8 +191,6 @@ class MessageProcessor(BaseObject):
 
         for observer in self._observers:
             try:
-                return await observer.on_exception(
-                    source_message=message, exception=exception
-                )
+                await observer.on_exception(source_message=message, exception=exception)
             except Exception as e:
                 logger.exception(f"Observer {observer} failed on_exception: {e}")
