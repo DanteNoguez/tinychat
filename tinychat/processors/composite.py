@@ -1,37 +1,14 @@
 from typing import Optional
-from dataclasses import dataclass
 import asyncio
 from loguru import logger
 
-from tinychat.messages.messages import (
+from tinychat.messages import (
     Message,
     EgressMessage,
 )
-from tinychat.processors.message_processor import MessageProcessor, SetupConfig
+from tinychat.processors.message_processor import MessageProcessor
+from tinychat.processors.models import SetupConfig, Topology, ProcessorNode
 from tinychat.processors.exceptions import MaxHopsExceededError
-
-
-@dataclass(frozen=True)
-class ProcessorNode:
-    """Information about a processor in the topology graph."""
-
-    name: str
-    handles: list[str]
-    produces: list[str]
-
-
-@dataclass(frozen=True)
-class Topology:
-    """Topology graph of a CompositeProcessor."""
-
-    nodes: list[ProcessorNode]
-
-    def get_node(self, name: str) -> Optional[ProcessorNode]:
-        """Get node by processor name."""
-        for node in self.nodes:
-            if node.name == name:
-                return node
-        return None
 
 
 class CompositeProcessor(MessageProcessor):
@@ -110,7 +87,7 @@ class CompositeProcessor(MessageProcessor):
             # Get handler for message type
             handler = self.get_handler(type(message))
             if not handler:
-                raise ValueError(f"No handler for {message.name}")
+                raise ValueError(f"No handler for {type(message).__name__}")
 
             # Process message with cancellation support
             try:

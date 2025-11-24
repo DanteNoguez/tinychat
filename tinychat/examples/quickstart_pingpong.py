@@ -9,8 +9,7 @@ from tinychat.messages.messages import (
     Message,
 )
 from tinychat.asynchronous.manager import TaskManagerParams
-from tinychat.processors.message_processor import MessageProcessor, SetupConfig
-from tinychat.processors.composite import CompositeProcessor
+from tinychat.processors import MessageProcessor, SetupConfig, CompositeProcessor
 from tinychat.observers.observer import (
     BaseObserver,
     MessageReceived,

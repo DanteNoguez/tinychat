@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 from typing import Optional, Any
 from dataclasses import dataclass, field
 
-from tinychat.messages.messages import Message
+from tinychat.messages import Message
 from tinychat.services.llm.tools import Tool
 
 load_dotenv()

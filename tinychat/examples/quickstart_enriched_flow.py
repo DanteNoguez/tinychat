@@ -3,13 +3,13 @@ from typing import Optional
 from dataclasses import dataclass
 from loguru import logger
 
-from tinychat.messages.messages import (
+from tinychat.messages import (
     EgressMessage,
     Message,
+    MetricMessage,
 )
 from tinychat.asynchronous.manager import TaskManagerParams
-from tinychat.processors.message_processor import MessageProcessor, SetupConfig
-from tinychat.processors.composite import CompositeProcessor
+from tinychat.processors import MessageProcessor, SetupConfig, CompositeProcessor
 from tinychat.observers.observer import (
     BaseObserver,
     MessageReceived,
@@ -55,34 +55,24 @@ class CustomIngressMessage(Message):
 
 
 class LoggingObserver(BaseObserver):
-    def __init__(self):
-        self._received_messages: dict[str, MessageReceived] = {}
-
     async def on_message_received(self, message: MessageReceived) -> None:
         logger.debug(
             f"📨 [{message.source_processor.name}] Received: {message.content}"
         )
-        # Track received message for latency calculation
-        self._received_messages[message.source_message.id] = message
 
     async def on_message_processed(self, message: MessageProcessed) -> None:
         logger.debug(
             f"✅ [{message.source_processor.name}] Processed: {message.content}"
         )
 
-        # Calculate and log latency
-        received_msg = self._received_messages.get(message.source_message.id)
-        if received_msg:
-            latency_ns = message.timestamp - received_msg.timestamp
-            latency_us = latency_ns / 1_000
-            logger.debug(
-                f"⏱️  [{message.source_processor.name}] Latency: {latency_us:.2f}μs"
-            )
-            del self._received_messages[message.source_message.id]
-
     async def on_exception(self, source_message: Message, exception: Exception) -> None:
         logger.error(
             f"❌ [{source_message.name}] Exception: {exception} at {source_message.timestamp}"
+        )
+
+    async def on_metric_recorded(self, metric: MetricMessage) -> None:
+        logger.debug(
+            f"⏱️ Metric {metric.metric_name} - Processed {metric.content} in {metric.metric_value} {metric.metric_unit}"
         )
 
 

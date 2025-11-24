@@ -1,10 +1,11 @@
 import json
 from typing import Optional
+from loguru import logger
 
 from openai import AsyncOpenAI
 from openai.types.responses import Response, ResponseFunctionToolCall
 
-from tinychat.messages.messages import Message
+from tinychat.messages import Message
 from tinychat.services.llm.models import (
     OpenAILLMConfig,
     Tool,
@@ -40,18 +41,13 @@ class OpenAILLM(LLMService):
             return message
         return OpenAIUserMessage(content=message.content)
 
-    async def _generate_completion(self, depth: int = 0) -> LLMMessage:
+    async def _generate_completion(self, depth: int = 0) -> Message:
         if depth > self._llm_config.recursion_limit:
             raise RuntimeError("Recursion limit reached.")
 
-        # Prepare Messages
-        api_messages: list[dict] = []
-        if self.instructions:
-            api_messages.append({"role": "system", "content": self.instructions})
+        api_messages = [m.to_openai_format() for m in self.chat_history]
 
-        # Convert internal history to OpenAI format
-        api_messages.extend([m.to_openai_format() for m in self.chat_history])
-
+        logger.trace(f"{self} - API request: Chat history: {api_messages}")
         response = await self.client.responses.create(
             model=self._llm_config.model_name,
             temperature=self._llm_config.temperature,
@@ -60,6 +56,7 @@ class OpenAILLM(LLMService):
             tool_choice="auto" if self._llm_config.tools else None,
             input=api_messages,
         )
+        logger.trace(f"{self} - API response: {response}")
 
         # Handle Response
         output_item = response.output[0]
@@ -75,6 +72,11 @@ class OpenAILLM(LLMService):
         self, item: ResponseFunctionToolCall, depth: int
     ) -> LLMMessage:
         args = json.loads(item.arguments)
+
+        # Check if the tool name corresponds to a routing message
+        if routing_msg := self._get_routing_message(item.name, args):
+            self.add_message(OpenAIAssistantMessage(content=str(args)))
+            return routing_msg
 
         tool_call = ToolCall(
             content=args,
@@ -137,6 +139,7 @@ class OpenAILLM(LLMService):
                     },
                 }
             )
+        logger.trace(f"{self} - Tools schema: {output}")
         return output
 
     def _type_schema_to_dict(self, schema: TypeSchema) -> dict:

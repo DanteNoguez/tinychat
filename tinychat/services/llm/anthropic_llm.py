@@ -1,4 +1,5 @@
 from typing import Optional
+from loguru import logger
 
 from anthropic import AsyncAnthropic
 from anthropic.types import (
@@ -7,7 +8,7 @@ from anthropic.types import (
     TextBlock,
 )
 
-from tinychat.messages.messages import Message
+from tinychat.messages import Message
 from tinychat.services.llm.models import (
     AnthropicLLMConfig,
     LLMMessage,
@@ -41,13 +42,18 @@ class AnthropicLLM(LLMService):
             return message
         return AnthropicUserMessage(content=message.content)
 
-    async def _generate_completion(self, depth: int = 0) -> LLMMessage:
+    async def _generate_completion(self, depth: int = 0) -> Message:
         if depth > self._llm_config.recursion_limit:
             raise RuntimeError("Recursion limit reached.")
 
-        # Prepare Messages
-        # Convert internal history to Anthropic format
-        raw_history = [m.to_anthropic_format() for m in self.chat_history]
+        # Handle system message in history (remove if present for Anthropic API messages list)
+        messages_to_process = (
+            self.chat_history[1:]
+            if self.chat_history[0].role == "system"
+            else self.chat_history
+        )
+
+        raw_history = [m.to_anthropic_format() for m in messages_to_process]
 
         # Ensure alternation (Anthropic strict requirement)
         api_messages = self._prepare_messages_for_api(raw_history)
@@ -61,12 +67,16 @@ class AnthropicLLM(LLMService):
 
         # Use "instructions" via the system parameter
         if self.instructions:
-            kwargs["system"] = self.instructions
+            kwargs["system"] = self.instructions.content
 
         if self.tools_schema:
             kwargs["tools"] = self.tools_schema
 
+        logger.trace(
+            f"{self} - API request: Instructions: {self.instructions} - Chat history: {api_messages}"
+        )
         response: AnthropicMessage = await self.client.messages.create(**kwargs)
+        logger.trace(f"{self} - API response: {response}")
 
         # Handle Stop Reason: Tool Use
         if response.stop_reason and response.stop_reason == "tool_use":
@@ -80,9 +90,7 @@ class AnthropicLLM(LLMService):
         self.add_message(assistant_msg)
         return assistant_msg
 
-    async def _handle_tool_use(
-        self, response: AnthropicMessage, depth: int
-    ) -> LLMMessage:
+    async def _handle_tool_use(self, response: AnthropicMessage, depth: int) -> Message:
         tool_calls: list[ToolUseBlock] = []
 
         # Note: We add individual ToolCalls to our linear history.
@@ -90,7 +98,15 @@ class AnthropicLLM(LLMService):
         for block in response.content:
             if isinstance(block, TextBlock):
                 self.add_message(AnthropicAssistantMessage(content=block.text))
+
             elif isinstance(block, ToolUseBlock):
+                # Check if the tool name corresponds to a routing message
+                if routing_msg := self._get_routing_message(block.name, block.input):
+                    self.add_message(
+                        AnthropicAssistantMessage(content=str(block.input))
+                    )
+                    return routing_msg
+
                 tool_calls.append(block)
                 self.add_message(
                     ToolCall(
@@ -105,11 +121,12 @@ class AnthropicLLM(LLMService):
         for block in tool_calls:
             result = await self.execute_tool(block.name, block.input)
 
-            self.add_message(
-                ToolCallOutput(
-                    tool_call_id=block.id, tool_output=result, content=result
-                )
+            tool_output = ToolCallOutput(
+                tool_call_id=block.id,
+                tool_output=result,
+                content=result,
             )
+            self.add_message(tool_output)
 
         return await self._generate_completion(depth + 1)
 
@@ -179,6 +196,7 @@ class AnthropicLLM(LLMService):
                     },
                 }
             )
+        logger.trace(f"{self} - Tools schema: {output}")
         return output
 
     def _type_schema_to_dict(self, schema: TypeSchema) -> dict:
