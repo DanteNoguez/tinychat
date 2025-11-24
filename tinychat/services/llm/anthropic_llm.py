@@ -8,7 +8,7 @@ from anthropic.types import (
     TextBlock,
 )
 
-from tinychat.messages.messages import Message
+from tinychat.messages import Message
 from tinychat.services.llm.models import (
     AnthropicLLMConfig,
     LLMMessage,
@@ -42,7 +42,7 @@ class AnthropicLLM(LLMService):
             return message
         return AnthropicUserMessage(content=message.content)
 
-    async def _generate_completion(self, depth: int = 0) -> LLMMessage:
+    async def _generate_completion(self, depth: int = 0) -> Message:
         if depth > self._llm_config.recursion_limit:
             raise RuntimeError("Recursion limit reached.")
 
@@ -64,14 +64,14 @@ class AnthropicLLM(LLMService):
         if self.instructions:
             kwargs["system"] = self.instructions
 
-        logger.trace(
-            f"{self} - Instructions: {self.instructions} - Chat history: {api_messages}"
-        )
-
         if self.tools_schema:
             kwargs["tools"] = self.tools_schema
 
+        logger.trace(
+            f"{self} - API request: Instructions: {self.instructions} - Chat history: {api_messages}"
+        )
         response: AnthropicMessage = await self.client.messages.create(**kwargs)
+        logger.trace(f"{self} - API response: {response}")
 
         # Handle Stop Reason: Tool Use
         if response.stop_reason and response.stop_reason == "tool_use":
@@ -85,9 +85,7 @@ class AnthropicLLM(LLMService):
         self.add_message(assistant_msg)
         return assistant_msg
 
-    async def _handle_tool_use(
-        self, response: AnthropicMessage, depth: int
-    ) -> LLMMessage:
+    async def _handle_tool_use(self, response: AnthropicMessage, depth: int) -> Message:
         tool_calls: list[ToolUseBlock] = []
 
         # Note: We add individual ToolCalls to our linear history.
@@ -118,11 +116,12 @@ class AnthropicLLM(LLMService):
         for block in tool_calls:
             result = await self.execute_tool(block.name, block.input)
 
-            self.add_message(
-                ToolCallOutput(
-                    tool_call_id=block.id, tool_output=result, content=result
-                )
+            tool_output = ToolCallOutput(
+                tool_call_id=block.id,
+                tool_output=result,
+                content=result,
             )
+            self.add_message(tool_output)
 
         return await self._generate_completion(depth + 1)
 

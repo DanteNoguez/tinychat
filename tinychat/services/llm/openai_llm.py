@@ -5,7 +5,7 @@ from loguru import logger
 from openai import AsyncOpenAI
 from openai.types.responses import Response, ResponseFunctionToolCall
 
-from tinychat.messages.messages import Message
+from tinychat.messages import Message
 from tinychat.services.llm.models import (
     OpenAILLMConfig,
     Tool,
@@ -53,8 +53,7 @@ class OpenAILLM(LLMService):
         # Convert internal history to OpenAI format
         api_messages.extend([m.to_openai_format() for m in self.chat_history])
 
-        logger.trace(f"{self} - Chat history: {api_messages}")
-
+        logger.trace(f"{self} - API request: Chat history: {api_messages}")
         response = await self.client.responses.create(
             model=self._llm_config.model_name,
             temperature=self._llm_config.temperature,
@@ -63,6 +62,7 @@ class OpenAILLM(LLMService):
             tool_choice="auto" if self._llm_config.tools else None,
             input=api_messages,
         )
+        logger.trace(f"{self} - API response: {response}")
 
         # Handle Response
         output_item = response.output[0]

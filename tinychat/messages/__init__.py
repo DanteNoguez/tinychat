@@ -3,6 +3,7 @@ from tinychat.messages.messages import (
     IngressMessage,
     EgressMessage,
     ControlMessage,
+    MetricMessage,
 )
 
 __all__ = [
@@ -10,4 +11,5 @@ __all__ = [
     "IngressMessage",
     "EgressMessage",
     "ControlMessage",
+    "MetricMessage",
 ]

@@ -1,28 +1,19 @@
 import asyncio
+import time
 from abc import abstractmethod
-from dataclasses import dataclass, field
 from typing import Coroutine, List, Optional
 
 from loguru import logger
 
 from tinychat.utils.base_object import BaseObject
-from tinychat.messages.messages import Message
+from tinychat.messages import Message, MetricMessage
 from tinychat.observers.observer import (
     BaseObserver,
     MessageReceived,
     MessageProcessed,
 )
-from tinychat.asynchronous.manager import (
-    TaskManager,
-    TaskManagerParams,
-)
-
-
-@dataclass
-class SetupConfig:
-    task_manager_params: TaskManagerParams
-    task_manager: TaskManager = TaskManager()
-    observers: List[BaseObserver] = field(default_factory=list)
+from tinychat.asynchronous.manager import TaskManager
+from tinychat.processors.models import SetupConfig
 
 
 class MessageProcessor(BaseObject):
@@ -120,14 +111,16 @@ class MessageProcessor(BaseObject):
 
         try:
             result = await self._process(message)
-            self.create_task(
-                self._notify_processed(message, result), name="notify_processed"
-            )
-            return result
-
         except Exception as e:
             self.create_task(self._notify_error(message, e), name="notify_error")
             raise
+
+        self.create_task(
+            self._notify_processed(message, result),
+            name="notify_processed",
+        )
+
+        return result
 
     @abstractmethod
     async def _process(self, message: Message) -> Optional[Message]:
@@ -162,6 +155,7 @@ class MessageProcessor(BaseObject):
         self,
         message: Message,
         result: Optional[Message],
+        timestamp: int = time.monotonic_ns(),
     ) -> None:
         if not self._observers:
             return
@@ -172,12 +166,23 @@ class MessageProcessor(BaseObject):
             content=result.content if result else None,
         )
 
+        metric = MetricMessage(
+            content=message.name,
+            metric_name="message_processing_time",
+            metric_value=(
+                (result.timestamp if result else timestamp) - message.timestamp
+            )
+            / 1_000_000,
+            metric_unit="ms",
+        )
+
         for observer in self._observers:
             try:
-                return await observer.on_message_processed(data)
+                await observer.on_metric_recorded(metric)
+                await observer.on_message_processed(data)
             except Exception as e:
                 logger.exception(
-                    f"Observer {observer} failed on_message_processed: {e}"
+                    f"Observer {observer} failed on_message_processed or on_metric_recorded: {e}"
                 )
 
     async def _notify_error(self, message: Message, exception: Exception) -> None:

@@ -2,9 +2,8 @@ import asyncio
 from dataclasses import dataclass
 from loguru import logger
 
-from tinychat.messages.messages import Message, EgressMessage
-from tinychat.processors.message_processor import MessageProcessor, SetupConfig
-from tinychat.processors.composite import CompositeProcessor
+from tinychat.messages import Message, EgressMessage
+from tinychat.processors import MessageProcessor, SetupConfig, CompositeProcessor
 from tinychat.asynchronous.manager import TaskManagerParams
 
 

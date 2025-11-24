@@ -5,18 +5,17 @@ from typing import Literal
 from loguru import logger
 from dotenv import load_dotenv
 
-from tinychat.messages.messages import Message, EgressMessage
-from tinychat.processors.message_processor import MessageProcessor, SetupConfig
-from tinychat.processors.composite import CompositeProcessor
+from tinychat.messages import Message, EgressMessage, MetricMessage
+from tinychat.processors import MessageProcessor, SetupConfig, CompositeProcessor
+from tinychat.services.llm.models import LLMMessage, ToolCall, ToolCallOutput
 from tinychat.services.llm.openai_llm import OpenAILLM, OpenAILLMConfig
 from tinychat.services.llm.anthropic_llm import AnthropicLLM, AnthropicLLMConfig
 from tinychat.asynchronous.manager import TaskManagerParams
-from tinychat.observers.observer import BaseObserver, MessageProcessed, MessageReceived
-from tinychat.utils.logging import configure_pretty_logging
+from tinychat.observers.observer import LLMObserver, MessageProcessed, MessageReceived
 
 load_dotenv()
 
-configure_pretty_logging(debug_level=5)
+# configure_pretty_logging(debug_level=5)
 
 # ==============================================================================
 # 1. Define Message Types (The "Protocol")
@@ -44,7 +43,7 @@ class BillingInquiry(Message):
 
 @dataclass(frozen=True)
 class ResolvedTicket(Message):
-    """Emit a final resolution for the user."""
+    """Provide a resolution ticket for the user."""
 
     agent_name: str
 
@@ -68,38 +67,58 @@ class ResponseFormatter(MessageProcessor):
     """Formats the final response for egress."""
 
     async def _process(self, message: ResolvedTicket) -> EgressMessage:
-        formatted = f"\n[{message.agent_name}] says: {message.content}\n"
-        logger.success(f"✅ Final Response: {formatted}")
+        formatted = f"[{message.agent_name}] says: {message.content}\n"
+        logger.success(f"Final Response: {formatted}")
         return EgressMessage(content=formatted)
 
 
-class SimpleLogger(BaseObserver):
+# ==============================================================================
+# 3. Instrumentation
+# ==============================================================================
+
+
+class LoggerObserver(LLMObserver):
     """Logs the flow of message types through the system."""
 
     async def on_message_processed(self, event: MessageProcessed):
         logger.debug(
-            f"🔄 {event.source_processor.name} -> {type(event.source_message).__name__}"
+            f"{event.source_processor.name} Processed: {type(event.source_message).__name__}: "
+            f"{event.content}"
         )
 
     async def on_exception(self, source_message: Message, exception: Exception) -> None:
         logger.error(
-            f"❌ {source_message.name} Exception: {exception} at {source_message.timestamp}"
+            f"{source_message.name} Exception: {exception} at {source_message.timestamp}"
         )
 
     async def on_message_received(self, message: MessageReceived) -> None:
-        logger.debug(f"📨 {message.source_processor.name} -> {message.content}")
+        logger.debug(f"{message.source_processor.name} Received: {message.content}")
 
+    async def on_metric_recorded(self, metric: MetricMessage) -> None:
+        logger.info(
+            f"Metric {metric.metric_name} - Processed {metric.content} in {metric.metric_value} {metric.metric_unit}"
+        )
 
-# ==============================================================================
-# 3. Main Flow
-# ==============================================================================
+    async def on_tool_call(self, tool_call: ToolCall) -> None:
+        logger.info(f"Tool Call: {tool_call.name} with args {tool_call.tool_arguments}")
+
+    async def on_tool_result(self, tool_result: ToolCallOutput) -> None:
+        logger.info(
+            f"Tool Result: {tool_result.name} with result {tool_result.content}"
+        )
+
+    async def on_llm_generation(self, llm_message: LLMMessage) -> None:
+        logger.info(f"LLM Generation: {llm_message.content}")
+
+    async def on_context_update(self, messages: list[LLMMessage]) -> None:
+        logger.debug(f"Context Update: {messages}")
 
 
 async def main():
     # --- Configuration ---
     config = SetupConfig(
         task_manager_params=TaskManagerParams(loop=asyncio.get_running_loop()),
-        observers=[SimpleLogger()],
+        observers=[LoggerObserver()],
     )
 
     # --- 1. Router Agent (OpenAI) ---
@@ -113,8 +132,9 @@ async def main():
                 "If it's a technical problem, issue a TechnicalIssue. "
                 "If it's about payments or accounts, issue a BillingInquiry. "
                 "Extract relevant details into the fields."
-                "Be concise."
-            )
+                "Be concise, don't use more than two sentences per inquiry."
+            ),
+            max_tokens=100,
         ),
         # CRITICAL: Declaring output_types triggers the tool generation!
         output_types={TechnicalIssue, BillingInquiry},
@@ -125,7 +145,12 @@ async def main():
     tech_llm = AnthropicLLM(
         name="TechSupport",
         llm_config=AnthropicLLMConfig(
-            instructions="You are a helpful tech support engineer. Provide a concise solution."
+            instructions=(
+                "You are a helpful tech support engineer."
+                "If you receive an inquiry, immediately call the tool to create a resolution ticket."
+                "In the content of the ticket, include a concise solution of no more than two sentences."
+            ),
+            max_tokens=500,
         ),
         output_types={ResolvedTicket},  # It produces a resolution
     )

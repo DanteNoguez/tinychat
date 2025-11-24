@@ -3,10 +3,11 @@ from typing import Optional
 
 from loguru import logger
 
-from tinychat.processors.message_processor import MessageProcessor
-from tinychat.messages.messages import Message, EgressMessage
-from tinychat.services.llm.models import LLMConfig, LLMMessage
+from tinychat.processors import MessageProcessor
+from tinychat.messages import Message, EgressMessage
+from tinychat.services.llm.models import LLMConfig, LLMMessage, ToolCall, ToolCallOutput
 from tinychat.services.llm.tools import GenerateTypedMessageTool
+from tinychat.observers.observer import LLMObserver
 
 
 class LLMService(MessageProcessor):
@@ -61,13 +62,24 @@ class LLMService(MessageProcessor):
         """Manually adds a message to the conversation history."""
         self.chat_history.append(message)
 
+        if isinstance(message, ToolCall):
+            self.create_task(self._notify_tool_call(message))
+        elif isinstance(message, ToolCallOutput):
+            self.create_task(self._notify_tool_result(message))
+        elif message.role == "assistant":
+            self.create_task(self._notify_llm_generation(message))
+
+        self.create_task(self._notify_context_update(self.chat_history))
+
     def add_messages(self, messages: list[LLMMessage]) -> None:
         """Manually adds multiple messages to the history."""
         self.chat_history.extend(messages)
+        self.create_task(self._notify_context_update(self.chat_history))
 
     def clear_history(self) -> None:
         """Clears the conversation history."""
         self.chat_history.clear()
+        self.create_task(self._notify_context_update(self.chat_history))
 
     def set_instructions(self, instructions: str) -> None:
         """Sets the persistent instructions (system prompt) for the LLM."""
@@ -131,6 +143,7 @@ class LLMService(MessageProcessor):
         If so, instantiates and returns the Message.
         """
         if message_type := self.routing_tools.get(name):
+            self.create_task(self._notify_llm_routing(message_type(**arguments)))
             try:
                 return message_type(**arguments)
             except Exception as e:
@@ -138,3 +151,66 @@ class LLMService(MessageProcessor):
                 # Fallback: return None so the caller treats it as a normal tool failure
                 return None
         return None
+
+    # ==========================================================================
+    # Instrumentation
+    # ==========================================================================
+
+    async def _notify_tool_call(self, tool_call: ToolCall) -> None:
+        if not self._observers:
+            return
+
+        for observer in self._observers:
+            if isinstance(observer, LLMObserver):
+                try:
+                    return await observer.on_tool_call(tool_call)
+                except Exception as e:
+                    logger.exception(f"Observer {observer} failed on_tool_call: {e}")
+
+    async def _notify_tool_result(self, tool_result: ToolCallOutput) -> None:
+        if not self._observers:
+            return
+
+        for observer in self._observers:
+            if isinstance(observer, LLMObserver):
+                try:
+                    return await observer.on_tool_result(tool_result)
+                except Exception as e:
+                    logger.exception(f"Observer {observer} failed on_tool_result: {e}")
+
+    async def _notify_llm_generation(self, llm_message: LLMMessage) -> None:
+        if not self._observers:
+            return
+
+        for observer in self._observers:
+            if isinstance(observer, LLMObserver):
+                try:
+                    return await observer.on_llm_generation(llm_message)
+                except Exception as e:
+                    logger.exception(
+                        f"Observer {observer} failed on_llm_generation: {e}"
+                    )
+
+    async def _notify_context_update(self, messages: list[LLMMessage]) -> None:
+        if not self._observers:
+            return
+
+        for observer in self._observers:
+            if isinstance(observer, LLMObserver):
+                try:
+                    return await observer.on_context_update(messages)
+                except Exception as e:
+                    logger.exception(
+                        f"Observer {observer} failed on_context_update: {e}"
+                    )
+
+    async def _notify_llm_routing(self, message: Message) -> None:
+        if not self._observers:
+            return
+
+        for observer in self._observers:
+            if isinstance(observer, LLMObserver):
+                try:
+                    return await observer.on_llm_routing(message)
+                except Exception as e:
+                    logger.exception(f"Observer {observer} failed on_llm_routing: {e}")
